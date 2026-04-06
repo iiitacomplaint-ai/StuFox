@@ -1,8 +1,8 @@
-const pool=require('../config/db');
-const bcrypt =require('bcrypt');
-const {generateToken,generateOtpToken,verifyOtpToken}=require('../utils/utility');
+const pool = require('../config/db');
+const bcrypt = require('bcrypt');
+const { generateToken, generateOtpToken, verifyOtpToken } = require('../utils/utility');
 require('dotenv').config();
-const {mailFormat,setOtp,verifyOtp,generateOtp}=require('../utils/otp');
+const { mailFormat, setOtp, verifyOtp, generateOtp } = require('../utils/otp');
 
 const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
 const nodemailer = require('nodemailer');
@@ -10,16 +10,13 @@ const nodemailer = require('nodemailer');
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER, 
-    pass: process.env.EMAIL_PASS  
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
   }
 });
 
-
-
-
 const sendotp = async (req, res) => {
-  console.log('request recieved');
+  console.log('request received');
   const { email, type } = req.body;
 
   if (!email || !type) {
@@ -27,7 +24,7 @@ const sendotp = async (req, res) => {
   }
 
   const otp = generateOtp();
-  const result = setOtp({email, otp, type}); // store in otpMap
+  const result = setOtp({ email, otp, type });
 
   if (!result.status) {
     return res.status(500).json({ success: false, message: result.message });
@@ -41,14 +38,12 @@ const sendotp = async (req, res) => {
       html: mailFormat(otp),
     });
 
-
-    // 🔥 Generate OTP token with email & type for frontend verification flow
-    const otpToken = generateOtpToken({email, type});
+    const otpToken = generateOtpToken({ email, type });
 
     return res.status(200).json({
       success: true,
       message: 'OTP sent successfully',
-      otpToken, // ✅ return token containing type for frontend usage
+      otpToken,
     });
   } catch (error) {
     console.error('Mail sending failed:', error);
@@ -59,22 +54,20 @@ const sendotp = async (req, res) => {
   }
 };
 
-
-
 const signup = async (req, res) => {
   console.log("api hit");
-  const { name, email, password, cnfpassword, phoneNumber, dob, otpToken } = req.body;
-  const role = 'citizen';
+  const { name, email, password, cnfpassword, phone_number, otpToken } = req.body;
+  const role = 'user'; // Changed from 'citizen' to 'user' as per new schema
 
-  // ✅ Check required fields
-  if (!otpToken || !name || !email || !password || !cnfpassword || !phoneNumber || !dob) {
+  // Check required fields
+  if (!otpToken || !name || !email || !password || !cnfpassword || !phone_number) {
     return res.status(400).json({
       success: false,
       message: 'All fields, including confirm password and OTP token, are required.'
     });
   }
 
-  // ✅ Check password and confirm password match
+  // Check password and confirm password match
   if (password !== cnfpassword) {
     return res.status(400).json({
       success: false,
@@ -82,7 +75,7 @@ const signup = async (req, res) => {
     });
   }
 
-  // ✅ Check password strength
+  // Check password strength
   if (!strongPasswordRegex.test(password)) {
     return res.status(400).json({
       success: false,
@@ -91,7 +84,7 @@ const signup = async (req, res) => {
   }
 
   try {
-    // ✅ Verify OTP token
+    // Verify OTP token
     const decoded = verifyOtpToken(otpToken);
 
     if (decoded.type !== 'signup' || decoded.email !== email) {
@@ -101,9 +94,9 @@ const signup = async (req, res) => {
       });
     }
 
-    // ✅ Check email uniqueness
+    // Check email uniqueness
     const emailCheck = await pool.query(
-      'SELECT 1 FROM users WHERE email = $1',
+      'SELECT user_id FROM users WHERE email = $1',
       [email]
     );
     if (emailCheck.rows.length > 0) {
@@ -113,10 +106,10 @@ const signup = async (req, res) => {
       });
     }
 
-    // ✅ Check phone number uniqueness
+    // Check phone number uniqueness
     const phoneCheck = await pool.query(
-      'SELECT 1 FROM users WHERE phone_number = $1',
-      [phoneNumber]
+      'SELECT user_id FROM users WHERE phone_number = $1',
+      [phone_number]
     );
     if (phoneCheck.rows.length > 0) {
       return res.status(400).json({
@@ -125,33 +118,32 @@ const signup = async (req, res) => {
       });
     }
 
-    // ✅ Hash password
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // ✅ Insert new user
+    // Insert new user (removed dob field as it's not in new schema)
     const userResult = await pool.query(
-      `INSERT INTO users (name, email, password, phone_number, dob, role)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *`,
-      [name, email, hashedPassword, phoneNumber, dob, role]
+      `INSERT INTO users (name, email, password, phone_number, role)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING user_id, name, email, phone_number, role, created_at`,
+      [name, email, hashedPassword, phone_number, role]
     );
 
-    const { password: _, ...safeUser } = userResult.rows[0];
+    const newUser = userResult.rows[0];
 
-    // ✅ Generate auth token
-    const token = generateToken(safeUser);
+    // Generate auth token
+    const token = generateToken(newUser);
 
     return res.status(201).json({
       success: true,
       message: 'User created successfully.',
       token,
-      user: safeUser,
+      user: newUser,
     });
 
   } catch (err) {
     console.error('Signup error:', err);
 
-    // ✅ Handle invalid OTP token specifically
     if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
       return res.status(401).json({
         success: false,
@@ -167,8 +159,6 @@ const signup = async (req, res) => {
   }
 };
 
- 
-  
 const login = async (req, res) => {
   const { email, password } = req.body;
 
@@ -183,7 +173,7 @@ const login = async (req, res) => {
   try {
     // Fetch user by email
     const result = await pool.query(
-      'SELECT * FROM users WHERE email = $1',
+      'SELECT user_id, name, email, password, phone_number, role, department, created_at FROM users WHERE email = $1',
       [email]
     );
 
@@ -212,23 +202,12 @@ const login = async (req, res) => {
     // Generate auth token
     const token = generateToken(safeUser);
 
-    // Fetch police details if role is police
-    let policeDetails = null;
-    if (user.role === 'police') {
-      const policeResult = await pool.query(
-        'SELECT * FROM police_details WHERE user_id = $1',
-        [user.user_id]
-      );
-      policeDetails = policeResult.rows[0] || null;
-    }
-
     // Return success response
     return res.status(200).json({
       success: true,
       message: 'Login successful.',
       token: token,
       user: safeUser,
-      policeDetails: policeDetails, // null if not police
     });
 
   } catch (err) {
@@ -265,7 +244,10 @@ const resetPassword = async (req, res) => {
     }
 
     // 3. Check if user exists
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const result = await pool.query(
+      'SELECT user_id, email FROM users WHERE email = $1',
+      [email]
+    );
     const user = result.rows[0];
 
     if (!user) {
@@ -274,30 +256,34 @@ const resetPassword = async (req, res) => {
         message: "User not found.",
       });
     }
+
+    // 4. Check password strength
     if (!strongPasswordRegex.test(password)) {
-  return res.status(400).json({
-    success: false,
-    message: "Password must be strong (min 8 chars, uppercase, lowercase, number, special character).",
-  });
-}
-    // 4. Hash new password
+      return res.status(400).json({
+        success: false,
+        message: "Password must be strong (min 8 chars, uppercase, lowercase, number, special character).",
+      });
+    }
+
+    // 5. Hash new password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 5. Update password in DB
+    // 6. Update password in DB
     const updateResult = await pool.query(
-      'UPDATE users SET password = $1 WHERE email = $2 RETURNING *',
+      'UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE email = $2 RETURNING user_id, name, email, phone_number, role, department',
       [hashedPassword, email]
     );
 
-    const { password: _, ...safeUser } = updateResult.rows[0];
+    const updatedUser = updateResult.rows[0];
 
-    // 6. Generate login token after reset
-    const token = generateToken(safeUser);
+    // 7. Generate login token after reset
+    const token = generateToken(updatedUser);
+    
     return res.status(200).json({
       success: true,
       message: "Password reset successful.",
       token: token,
-      user: safeUser,
+      user: updatedUser,
     });
 
   } catch (err) {
@@ -319,7 +305,7 @@ const verifyOtpCont = async (req, res) => {
 
   try {
     // Verify OTP in your in-memory Map store
-    const result = verifyOtp({email, otp, type}); // pass type if your otpMap stores it
+    const result = verifyOtp({ email, otp, type });
 
     if (!result.status) {
       return res.status(400).json({ success: false, message: result.message });
@@ -327,6 +313,7 @@ const verifyOtpCont = async (req, res) => {
 
     // OTP is valid – generate otpToken for further use
     const otpToken = generateOtpToken({ email, type });
+    
     return res.status(200).json({
       success: true,
       message: "OTP verified successfully.",
@@ -342,4 +329,143 @@ const verifyOtpCont = async (req, res) => {
     });
   }
 };
-module.exports={signup,sendotp,verifyOtpCont,login,resetPassword};
+
+// Optional: Get current user profile
+const getProfile = async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    
+    const result = await pool.query(
+      `SELECT user_id, name, email, phone_number, role, department, created_at, updated_at 
+       FROM users 
+       WHERE user_id = $1`,
+      [userId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Profile retrieved successfully',
+      user: result.rows[0]
+    });
+    
+  } catch (error) {
+    console.error('Get profile error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error fetching profile',
+      error: error.message
+    });
+  }
+};
+
+// Optional: Update user profile
+const updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const { name, phone_number } = req.body;
+    
+    const result = await pool.query(
+      `UPDATE users 
+       SET name = COALESCE($1, name),
+           phone_number = COALESCE($2, phone_number),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $3
+       RETURNING user_id, name, email, phone_number, role, department, created_at, updated_at`,
+      [name, phone_number, userId]
+    );
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: result.rows[0]
+    });
+    
+  } catch (error) {
+    console.error('Update profile error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error updating profile',
+      error: error.message
+    });
+  }
+};
+
+// Optional: Change password
+const changePassword = async (req, res) => {
+  const { current_password, new_password } = req.body;
+  const userId = req.user.user_id;
+  
+  if (!current_password || !new_password) {
+    return res.status(400).json({
+      success: false,
+      message: 'Current password and new password are required'
+    });
+  }
+  
+  // Check password strength
+  if (!strongPasswordRegex.test(new_password)) {
+    return res.status(400).json({
+      success: false,
+      message: 'New password must be at least 8 characters long, include uppercase, lowercase, number, and special character.'
+    });
+  }
+  
+  try {
+    // Get current password hash
+    const result = await pool.query(
+      'SELECT password FROM users WHERE user_id = $1',
+      [userId]
+    );
+    
+    const user = result.rows[0];
+    
+    // Verify current password
+    const isMatch = await bcrypt.compare(current_password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+    }
+    
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(new_password, 10);
+    
+    // Update password
+    await pool.query(
+      'UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
+      [hashedPassword, userId]
+    );
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+    
+  } catch (error) {
+    console.error('Change password error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error changing password',
+      error: error.message
+    });
+  }
+};
+
+module.exports = {
+  signup,
+  sendotp,
+  verifyOtpCont,
+  login,
+  resetPassword,
+  getProfile,
+  updateProfile,
+  changePassword
+};

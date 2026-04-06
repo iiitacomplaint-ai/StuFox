@@ -1,69 +1,54 @@
+/**
+ * Footer Component - Simplified Version
+ * UPDATED: Clean and simple footer for complaint system
+ * 
+ * @description Simple footer with essential links for complaint system
+ * @version 2.0.0
+ */
+
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield } from 'lucide-react';
+import { Building2 } from 'lucide-react';
 import PrivacyPrompt from './PrivacyPrompt';
 
 const Footer = () => {
     const [isPromptVisible, setIsPromptVisible] = useState(false);
-
-    const handleClosePrompt = () => {
-        setIsPromptVisible(false);
-    };
-
-    const handleShowPrompt = () => {
-        setIsPromptVisible(true);
-    };
+    const currentYear = new Date().getFullYear();
 
     return (
         <>
-            {/* The PrivacyPrompt component is now here, outside the main flow */}
             <PrivacyPrompt
                 isVisible={isPromptVisible}
-                onClose={handleClosePrompt}
+                onClose={() => setIsPromptVisible(false)}
             />
 
-            <footer className="bg-gray-100 border-t border-gray-300 text-gray-600 px-6 md:px-16 lg:px-24 xl:px-32 pt-10 w-full">
-                <div className="flex flex-col md:flex-row justify-between gap-12 pb-10 border-b border-gray-400/20">
-                    
-                    {/* Logo & Description */}
-                    <div className="md:max-w-md">
-                        <Link to='/' className="flex items-center gap-2 font-bold text-2xl text-blue-600 mb-4">
-                            <Shield className="h-8 w-8" />
-                            <span>Nyay Setu</span>
-                        </Link>
-                        <p className="text-sm leading-relaxed text-gray-700">
-                            Nyay Setu is a community-driven crime reporting platform empowering citizens to anonymously submit leads, report crimes, and bridge the gap with law enforcement to build a safer society for all.
-                        </p>
-                    </div>
-
-                    {/* Navigation */}
-                    <div className="flex flex-col md:flex-row gap-12 w-full md:w-auto">
-                        
-                        {/* Quick Links */}
-                        <div>
-                            <h2 className="font-semibold text-gray-800 mb-4">Quick Links</h2>
-                            <ul className="space-y-2 text-sm">
-                                <li><Link to="/" className="hover:text-blue-600 transition">Home</Link></li>
-                                <li><Link to="/about" className="hover:text-blue-600 transition">About Us</Link></li>
-                                {/* FIXED: "Privacy Policy" is now a button styled like a link inside the list */}
-                                <li>
-                                    <button 
-                                        onClick={handleShowPrompt} 
-                                        className="hover:text-blue-600 transition text-left w-full"
-                                    >
-                                        Privacy Policy
-                                    </button>
-                                </li>
-                            </ul>
+            <footer className="bg-gray-900 text-gray-400 px-6 md:px-16 lg:px-24 py-8 mt-auto">
+                <div className="max-w-7xl mx-auto">
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+                        {/* Logo */}
+                        <div className="flex items-center gap-2">
+                            <Building2 className="h-6 w-6 text-purple-500" />
+                            <span className="font-bold text-lg text-white">College Complaint System</span>
                         </div>
 
+                        {/* Links */}
+                        <div className="flex flex-wrap justify-center gap-6 text-sm">
+                            <Link to="/" className="hover:text-purple-400 transition">Home</Link>
+                            <Link to="/dashboard" className="hover:text-purple-400 transition">Dashboard</Link>
+                            <Link to="/about" className="hover:text-purple-400 transition">About</Link>
+                            <button onClick={() => setIsPromptVisible(true)} className="hover:text-purple-400 transition">
+                                Privacy Policy
+                            </button>
+                            <Link to="/contact" className="hover:text-purple-400 transition">Contact</Link>
+                        </div>
+                    </div>
+
+                    {/* Bottom Text */}
+                    <div className="text-center mt-6 pt-6 border-t border-gray-800 text-xs">
+                        <p>© {currentYear} College Complaint Management System. All rights reserved.</p>
+                        <p className="mt-1">Departments: Network | Cleaning | Carpentry | PC Maintenance | Plumbing | Electricity</p>
                     </div>
                 </div>
-
-                {/* Bottom Note */}
-                <p className="text-center text-xs md:text-sm text-gray-500 mt-6 pb-6">
-                    © 2025 Nyay Setu. All rights reserved.
-                </p>
             </footer>
         </>
     );

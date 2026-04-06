@@ -10,10 +10,10 @@ const generateToken = (user) => {
   return jwt.sign(
     {
       user_id: user.user_id,
-      user_role: user.role
+      role: user.role  // Changed from 'user_role' to 'role' for consistency
     },
     process.env.JWT_SECRET,
-    { expiresIn: '1h' }
+    { expiresIn: '24h' } // Extended to 24 hours for better user experience
   );
 };
 
@@ -35,7 +35,7 @@ const verifyToken = (token) => {
  */
 const generateOtpToken = ({email, type}) => {
   return jwt.sign(
-    { email, type }, // include type in payload
+    { email, type },
     process.env.OTP_SECRET,
     { expiresIn: '10m' }
   );
@@ -50,7 +50,7 @@ const generateOtpToken = ({email, type}) => {
 const verifyOtpToken = (token) => {
   const decoded = jwt.verify(token, process.env.OTP_SECRET);
   
-  // 🔥 Ensure 'type' exists in decoded
+  // Ensure 'type' exists in decoded
   if (!decoded.type) {
     throw new Error("Token does not contain 'type' field.");
   }

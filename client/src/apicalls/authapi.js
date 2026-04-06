@@ -1,258 +1,264 @@
 import api from "../utils/axiosInstance";
-import { setUser } from "../slices/userSlice";
+import { toast } from "react-toastify";
+
+// ==================== AUTHENTICATION APIs ====================
 
 // ✅ 1. Send OTP
-export const sendOtp = async ({email, type}) => {
-  if (!email || !type) {
-    throw new Error("Email and OTP type are required.");
-  }
-
+export const sendOtp = async (email, type) => {
   try {
-    const response = await api.post("/auth/sendotp", { email, type });
-
-    if (response.data && response.data.success) {
-      return { success: true, message: response.data.message };
+    const response = await api.post(`/auth/send-otp`, { email, type });
+    
+    if (response.data.success) {
+      return {
+        success: true,
+        message: response.data.message,
+        otpToken: response.data.otpToken
+      };
     } else {
-      throw new Error(response.data?.message || "Failed to send OTP");
+      toast.error(response.data.message || "Failed to send OTP");
+      return { success: false };
     }
   } catch (error) {
-    console.error("sendOtp error:", error);
-
-    throw new Error(
-      error.response?.data?.message ||
-      error.response?.statusText ||
-      error.message ||
-      "Unknown error occurred while sending OTP"
-    );
+    console.error("Send OTP error:", error);
+    const message = error.response?.data?.message || error.message;
+    toast.error(`Error: ${message}`);
+    return { success: false };
   }
 };
 
-
-
-export const signup = async ({ name, email, password, cnfpassword, phoneNumber, dob }) => {
-  const otpToken = localStorage.getItem("otpToken");
-
-  if (!otpToken) {
-    throw new Error("OTP verification required before signup. Please verify your email.");
-  }
-
+// ✅ 2. Verify OTP
+export const verifyOtp = async (email, otp, type) => {
   try {
-    const result = await api.post("/auth/signup", {
-      name,
-      email,
-      password,
-      cnfpassword,
-      phoneNumber,
-      dob,
-      otpToken,
-    });
-
-    if (result.data.token) {
-      // ✅ Save token to local storage
-      localStorage.setItem("token", result.data.token);
-
-      // ✅ Remove otpToken as it's now used
-      localStorage.removeItem("otpToken");
-
-      return result.data; // full data for mutation onSuccess
+    const response = await api.post(`/auth/verify-otp`, { email, otp, type });
+    
+    if (response.data.success) {
+      toast.success(response.data.message || "OTP verified successfully");
+      return {
+        success: true,
+        message: response.data.message,
+        otpToken: response.data.otpToken
+      };
     } else {
-      // ✅ Backend returned success:false without token
-      throw new Error(result.data.message || "Signup failed.");
+      toast.error(response.data.message || "OTP verification failed");
+      return { success: false };
     }
-
   } catch (error) {
-    // ✅ Axios error handling
-    if (error.response && error.response.data && error.response.data.message) {
-      throw new Error(error.response.data.message);
-    } else {
-      throw new Error("Signup failed. Please try again.");
-    }
+    console.error("Verify OTP error:", error);
+    const message = error.response?.data?.message || error.message;
+    toast.error(`Error: ${message}`);
+    return { success: false };
   }
 };
 
-
-
-
-// ✅ 3. Verify OTP
-export const verifyOtp = async ({email, otp, type}) => {
+// ✅ 3. Signup User
+export const signup = async (userData) => {
   try {
-    const response = await api.post("/auth/verify-otp", { email, otp, type });
-
-    if (response.data && response.data.success) {
-      // ✅ Save otpToken to localStorage if received
-      if (response.data.otpToken) {
-        localStorage.setItem("otpToken", response.data.otpToken);
-        console.log(response.data.otpToken);
+    const response = await api.post(`/auth/signup`, userData);
+    
+    if (response.data.success) {
+      toast.success(response.data.message || "User registered successfully!");
+      
+      // Save token to localStorage
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
       }
-
-      return {
-        success: true,
-        message: response.data.message || "OTP verified successfully.",
-        otpToken: response.data.otpToken,
-      };
-    } else {
-      // ❌ Throw error if backend response indicates failure
-      throw new Error(response.data?.message || "OTP verification failed.");
-    }
-
-  } catch (error) {
-    console.error("verifyOtp error:", error); // debug log
-
-    // ❌ Throw caught error so TanStack mutation onError can handle it
-    throw new Error(
-      error.response?.data?.message ||
-      error.response?.statusText ||
-      error.message ||
-      "Unknown error verifying OTP."
-    );
-  }
-};
-
-
-
-// ✅ 4. Login
-export const login = async ({ email, password }) => {
-  if (!email || !password) {
-    throw new Error("Email and password are required.");
-  }
-
-  try {
-    const result = await api.post("/auth/login", { email, password });
-
-    if (result.data.success && result.data.token) {
-      // ✅ Save token in localStorage
-      localStorage.setItem("token", result.data.token);
-
-      return {
-        success: true,
-        token: result.data.token,
-        user: result.data.user,
-        policeDetails: result.data.policeDetails || null,
-        message: result.data.message || "Login successful.",
-      };
-    }
-
-    throw new Error(result.data.message || "Login failed. Try again.");
-  } catch (error) {
-    console.error("Login Error:", error);
-    throw new Error(
-      error.response?.data?.message ||
-      error.response?.statusText ||
-      error.message ||
-      "Unknown login error"
-    );
-  }
-};
-
-
-// ✅ 5. Reset Password
-// export const resetPassword = async (formData, dispatch) => {
-//   console.log(formData);
-
-//   try {
-//     const { email, password } = formData;
-
-//     // 🔥 Retrieve otpToken from localStorage
-//     const otpToken = localStorage.getItem("otpToken");
-
-//     if (!email || !password || !verifiedOtpToken) {
-//       return {
-//         success: false,
-//         error: "Email, password, and verified OTP token are required.",
-//         message: "Incomplete data. Try verifying OTP again.",
-//       };
-//     }
-
-//     // ✅ Make PATCH request with required fields
-//     const result = await api.patch("/auth/resetpassword", {
-//       email,
-//       password,
-//       verifiedOtpToken,
-//     });
-
-//     if (result.data.success && result.data.token) {
-//       // ✅ Save login token after password reset
-//       localStorage.setItem("token", result.data.token);
-
-//       // ✅ Clear otpToken from localStorage after use
-//       localStorage.removeItem("otpToken");
-
-//       // ✅ Update Redux store
-//       dispatch(
-//         setUser({
-//           user: result.data.user,
-//           policeDetails: result.data.policeDetails || null,
-//           logedAt: Date.now(),
-//         })
-//       );
-
-//       return {
-//         success: true,
-//         token: result.data.token,
-//         message: result.data.message || "Password reset successful.",
-//       };
-//     }
-
-//     return {
-//       success: false,
-//       error: "No token received after resetting password.",
-//       message: result.data.message || "System down, try again later.",
-//     };
-//   } catch (error) {
-//     console.error("Reset Password Error:", error);
-//     return {
-//       success: false,
-//       error:
-//         error.response?.data?.message ||
-//         error.response?.statusText ||
-//         error.message,
-//       message:
-//         error.response?.data?.message ||
-//         "No response from server or unknown error.",
-//     };
-//   }
-// };
-
-export const resetPassword = async ({email,password}) => {
-
-  const otpToken = localStorage.getItem("otpToken");
-
-  if (!email || !password || !otpToken) {
-    throw new Error("Email, password, and verified OTP token are required. Please verify OTP again.");
-  }
-
-  try {
-    console.log('sending signup');
-    const result = await api.patch("/auth/resetpassword", {
-      email,
-      password,
-      otpToken,
-    });
-
-    if (result.data.success && result.data.token) {
-      localStorage.setItem("token", result.data.token);
-      localStorage.removeItem("otpToken");
-      console.log('successfull');
       
       return {
-        token: result.data.token,
-        user: result.data.user,
-        policeDetails: result.data.policeDetails || null,
-        message: result.data.message || "Password reset successful.",
+        success: true,
+        token: response.data.token,
+        user: response.data.user
       };
+    } else {
+      toast.error(response.data.message || "Signup failed");
+      return { success: false };
     }
-
-    // If no token received
-    throw new Error(result.data.message || "Password reset failed. System down, try again later.");
   } catch (error) {
-    console.error("Reset Password Error:", error);
-
-    throw new Error(
-      error.response?.data?.message ||
-      error.response?.statusText ||
-      error.message ||
-      "Unknown error during password reset."
-    );
+    console.error("Signup error:", error);
+    const message = error.response?.data?.message || error.message;
+    toast.error(`Error: ${message}`);
+    return { success: false };
   }
 };
 
+// ✅ 4. Login User
+export const login = async (email, password) => {
+  try {
+    const response = await api.post(`/auth/login`, { email, password });
+    
+    if (response.data.success) {
+      toast.success(response.data.message || "Login successful!");
+      
+      // Save token to localStorage
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+      }
+      
+      return {
+        success: true,
+        token: response.data.token,
+        user: response.data.user
+      };
+    } else {
+      toast.error(response.data.message || "Login failed");
+      return { success: false };
+    }
+  } catch (error) {
+    console.error("Login error:", error);
+    const message = error.response?.data?.message || error.message;
+    toast.error(`Error: ${message}`);
+    return { success: false };
+  }
+};
+
+// ✅ 5. Reset Password
+export const resetPassword = async (email, password, otpToken) => {
+  try {
+    const response = await api.post(`/auth/reset-password`, { email, password, otpToken });
+    
+    if (response.data.success) {
+      toast.success(response.data.message || "Password reset successful!");
+      
+      // Save new token
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+      }
+      
+      return {
+        success: true,
+        token: response.data.token,
+        user: response.data.user
+      };
+    } else {
+      toast.error(response.data.message || "Password reset failed");
+      return { success: false };
+    }
+  } catch (error) {
+    console.error("Reset password error:", error);
+    const message = error.response?.data?.message || error.message;
+    toast.error(`Error: ${message}`);
+    return { success: false };
+  }
+};
+
+// ✅ 6. Get User Profile (Protected)
+export const getProfile = async () => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    toast.error("You must be logged in to view profile");
+    return { success: false };
+  }
+
+  try {
+    const response = await api.get(`/auth/profile`);
+    
+    if (response.data.success) {
+      return {
+        success: true,
+        user: response.data.user
+      };
+    } else {
+      toast.error(response.data.message || "Failed to fetch profile");
+      return { success: false };
+    }
+  } catch (error) {
+    console.error("Get profile error:", error);
+    const message = error.response?.data?.message || error.message;
+    
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      toast.error("Session expired. Please login again.");
+    } else {
+      toast.error(`Error: ${message}`);
+    }
+    return { success: false };
+  }
+};
+
+// ✅ 7. Update User Profile (Protected)
+export const updateProfile = async (name, phone_number) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    toast.error("You must be logged in to update profile");
+    return { success: false };
+  }
+
+  try {
+    const response = await api.put(`/auth/profile`, { name, phone_number });
+    
+    if (response.data.success) {
+      toast.success(response.data.message || "Profile updated successfully!");
+      return {
+        success: true,
+        user: response.data.user
+      };
+    } else {
+      toast.error(response.data.message || "Profile update failed");
+      return { success: false };
+    }
+  } catch (error) {
+    console.error("Update profile error:", error);
+    const message = error.response?.data?.message || error.message;
+    toast.error(`Error: ${message}`);
+    return { success: false };
+  }
+};
+
+// ✅ 8. Change Password (Protected)
+export const changePassword = async (current_password, new_password) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    toast.error("You must be logged in to change password");
+    return { success: false };
+  }
+
+  try {
+    const response = await api.put(`/auth/change-password`, { current_password, new_password });
+    
+    if (response.data.success) {
+      toast.success(response.data.message || "Password changed successfully!");
+      return { success: true };
+    } else {
+      toast.error(response.data.message || "Password change failed");
+      return { success: false };
+    }
+  } catch (error) {
+    console.error("Change password error:", error);
+    const message = error.response?.data?.message || error.message;
+    toast.error(`Error: ${message}`);
+    return { success: false };
+  }
+};
+
+// ✅ 9. Logout
+export const logout = () => {
+  localStorage.removeItem('token');
+  toast.success("Logged out successfully!");
+  return { success: true };
+};
+
+// ✅ 10. Refresh Token (Protected)
+export const refreshToken = async () => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    return { success: false };
+  }
+
+  try {
+    const response = await api.post(`/auth/refresh-token`);
+    
+    if (response.data.success) {
+      localStorage.setItem('token', response.data.token);
+      return {
+        success: true,
+        token: response.data.token
+      };
+    } else {
+      localStorage.removeItem('token');
+      return { success: false };
+    }
+  } catch (error) {
+    console.error("Refresh token error:", error);
+    localStorage.removeItem('token');
+    return { success: false };
+  }
+};

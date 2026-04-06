@@ -1,44 +1,103 @@
+/**
+ * ComplaintDelete Component
+ * UPDATED: Converted from police crime system to college complaint system
+ * UPDATED: Changed API import from citizenapi to userapi
+ * UPDATED: Updated cancel functionality (users can cancel, not delete)
+ * UPDATED: Added status validation (only 'Submitted' complaints can be cancelled)
+ * UPDATED: Improved UI with better messaging for cancellation vs deletion
+ * 
+ * @description Modal component for users to cancel their complaints (only if status is 'Submitted')
+ * @version 2.0.0 (Complete rewrite for complaint management)
+ */
+
 import React, { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { deleteComplaint } from '../apicalls/citizenapi';
+import { cancelComplaint } from '../apicalls/userapi'; // Changed from deleteComplaint to cancelComplaint
 import { toast } from 'react-toastify';
 import { useSelector } from 'react-redux';
 import LoadingPage from './LoadingPage';
 
-const ComplaintDelete = ({ complaint, setDelete }) => {
+const ComplaintDelete = ({ complaint, setDelete, onRefresh }) => {
   const user = useSelector((state) => state.user?.user);
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const deleteMutation = useMutation({
-    mutationFn: (id) => deleteComplaint(id),
+  // Check if complaint can be cancelled (only 'Submitted' status)
+  const canCancel = complaint.status === 'Submitted';
+  
+  // Get appropriate messages based on status
+  const getMessages = () => {
+    if (canCancel) {
+      return {
+        title: "Cancel Complaint",
+        action: "Cancel",
+        actionColor: "bg-orange-600 hover:bg-orange-700",
+        question: "Are you sure you want to cancel this complaint?",
+        warning: "This action cannot be undone.",
+        success: "🎉 Complaint cancelled successfully!",
+        buttonText: "Cancel Complaint"
+      };
+    } else {
+      return {
+        title: "Cannot Cancel Complaint",
+        action: "Close",
+        actionColor: "bg-gray-600 hover:bg-gray-700",
+        question: `This complaint cannot be cancelled because its status is '${complaint.status}'.`,
+        warning: "Only 'Submitted' complaints can be cancelled.",
+        success: "",
+        buttonText: "Close"
+      };
+    }
+  };
+
+  const messages = getMessages();
+
+  const cancelMutation = useMutation({
+    mutationFn: (id) => cancelComplaint(id), // Changed from deleteComplaint to cancelComplaint
     onSuccess: (_, id) => {
-      toast.success("🎉 Complaint deleted successfully!");
+      toast.success(messages.success);
+      // Update cache
       queryClient.setQueryData(['complaints', user?.user_id], old =>
-        old ? old.filter(c => c.complaint_id !== id) : []
+        old ? old.map(c => 
+          c.complaint_id === id 
+            ? { ...c, status: 'Closed' } // Update status instead of removing
+            : c
+        ) : []
       );
+      queryClient.invalidateQueries(['complaints', user?.user_id]);
+      queryClient.invalidateQueries(['dashboard-stats', user?.user_id]);
+      
+      // Call refresh callback if provided
+      if (onRefresh) {
+        onRefresh();
+      }
+      
       setDelete(false);
     },
     onError: (error) => {
-      console.error('Delete complaint error:', error);
-      toast.error(error.message || 'Delete failed');
+      console.error('Cancel complaint error:', error);
+      toast.error(error.response?.data?.message || error.message || 'Failed to cancel complaint');
     },
   });
 
-  const handleDelete = () => {
+  const handleCancel = () => {
+    if (!canCancel) {
+      setDelete(false);
+      return;
+    }
     setConfirmDelete(true);
   };
 
-  const confirmAndDelete = () => {
-    deleteMutation.mutate(complaint.complaint_id);
+  const confirmAndCancel = () => {
+    cancelMutation.mutate(complaint.complaint_id);
   };
 
   const handleClose = () => {
     setDelete(false);
   };
 
-  if (deleteMutation.isPending) {
-    return <LoadingPage status="delete" message="Deleting complaint, please wait..." />;
+  if (cancelMutation.isPending) {
+    return <LoadingPage status="cancelling" message="Cancelling complaint, please wait..." />;
   }
 
   return (
@@ -52,9 +111,40 @@ const ComplaintDelete = ({ complaint, setDelete }) => {
           &times;
         </button>
 
-        <h3 className="text-xl font-semibold text-gray-800 mb-3">{complaint.title}</h3>
-        <p className="text-gray-700 mb-4">{complaint.description}</p>
-        <p className="text-sm text-gray-500 mb-6">Status: <span className="capitalize">{complaint.status}</span></p>
+        <h3 className="text-xl font-semibold text-gray-800 mb-3">{messages.title}</h3>
+        
+        <div className="mb-4">
+          <p className="text-gray-700 font-medium">Complaint: {complaint.title}</p>
+          <p className="text-gray-500 text-sm mt-1 line-clamp-2">{complaint.description}</p>
+        </div>
+
+        {/* Status Badge */}
+        <div className="mb-4">
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+            complaint.status === 'Submitted' ? 'bg-yellow-100 text-yellow-800' :
+            complaint.status === 'Assigned' ? 'bg-blue-100 text-blue-800' :
+            complaint.status === 'In Progress' ? 'bg-purple-100 text-purple-800' :
+            complaint.status === 'Resolved' ? 'bg-green-100 text-green-800' :
+            'bg-gray-100 text-gray-800'
+          }`}>
+            Status: {complaint.status}
+          </span>
+        </div>
+
+        {/* Warning/Cannot Cancel Message */}
+        {!canCancel && (
+          <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-500 rounded">
+            <p className="text-red-700 text-sm font-medium">{messages.question}</p>
+            <p className="text-red-600 text-xs mt-1">{messages.warning}</p>
+          </div>
+        )}
+
+        {canCancel && (
+          <div className="mb-4 p-3 bg-orange-50 border-l-4 border-orange-500 rounded">
+            <p className="text-orange-700 text-sm font-medium">⚠️ {messages.question}</p>
+            <p className="text-orange-600 text-xs mt-1">{messages.warning}</p>
+          </div>
+        )}
 
         <div className="flex justify-end gap-3">
           {!confirmDelete ? (
@@ -63,36 +153,33 @@ const ComplaintDelete = ({ complaint, setDelete }) => {
                 onClick={handleClose}
                 className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-700 text-sm font-medium transition-colors duration-200"
               >
-                Cancel
+                Close
               </button>
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium transition-colors duration-200 shadow-sm hover:shadow-md"
-              >
-                Delete
-              </button>
+              {canCancel && (
+                <button
+                  onClick={handleCancel}
+                  className={`px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-md text-sm font-medium transition-colors duration-200 shadow-sm hover:shadow-md`}
+                >
+                  Cancel Complaint
+                </button>
+              )}
             </>
           ) : (
             <div className="flex flex-col items-end gap-3 w-full">
-              <p className="text-red-600 text-sm font-medium w-full text-center">
-                Are you sure you want to delete this complaint?
-              </p>
               <div className="flex gap-3 w-full justify-end">
                 <button
                   onClick={() => {
-  setConfirmDelete(false);
-  handleClose();
-}}
-
+                    setConfirmDelete(false);
+                  }}
                   className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md text-sm font-medium transition-colors duration-200"
                 >
                   No, Keep It
                 </button>
                 <button
-                  onClick={confirmAndDelete}
+                  onClick={confirmAndCancel}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium transition-colors duration-200 shadow-sm hover:shadow-md"
                 >
-                  Yes, Delete
+                  Yes, Cancel Complaint
                 </button>
               </div>
             </div>

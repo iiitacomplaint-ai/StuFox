@@ -1,13 +1,66 @@
-const express=require('express');
-const router=express.Router();
-const {fetchStats, createPoliceOfficer, getFilteredPolice, deletePoliceOfficer, updatePoliceRank,getPolicePersonnelAnalysis,getComplaintsByBadge,getComplaintsByStationPincode}=require('../controller/adminController');
+const express = require('express');
+const router = express.Router();
+const {
+  createWorker,
+  getWorkers,
+  deleteWorker,
+  getAllComplaints,
+  assignComplaint,
+  reassignComplaint,
+  updateComplaintStatus,
+  getAuditLogs
+} = require('../controller/adminController');
 const { authenticate, authorise } = require('../middleware/authMiddleware');
-router.get('/fetchStats',authenticate,authorise(['admin']),fetchStats);
-router.post('/createPoliceOfficer',authenticate,authorise(['admin']),createPoliceOfficer);
-router.get('/getFilteredPolice',authenticate,authorise(['admin']),getFilteredPolice);
-router.delete('/deletePoliceOfficer',authenticate,authorise(['admin']),deletePoliceOfficer);
-router.put('/updatePoliceRank',authenticate,authorise(['admin']),updatePoliceRank);
-router.get('/getPolicePersonnelAnalysis',authenticate,authorise(['admin']),getPolicePersonnelAnalysis);
-router.get('/getComplaintsByBadge/:badgeNumber',authenticate,authorise(['admin']),getComplaintsByBadge);
-router.get('/getComplaintsByStationPincode/:pincode',authenticate,authorise(['admin']),getComplaintsByStationPincode);
-module.exports=router;
+
+// Worker Management Routes
+router.post('/createWorker', 
+  authenticate, 
+  authorise(['admin']), 
+  createWorker
+);
+
+router.get('/getWorkers', 
+  authenticate, 
+  authorise(['admin']), 
+  getWorkers
+);
+
+router.delete('/deleteWorker/:user_id', 
+  authenticate, 
+  authorise(['admin']), 
+  deleteWorker
+);
+
+// Complaint Management Routes
+router.get('/getAllComplaints', 
+  authenticate, 
+  authorise(['admin']), 
+  getAllComplaints
+);
+
+router.post('/assignComplaint', 
+  authenticate, 
+  authorise(['admin']), 
+  assignComplaint
+);
+
+router.put('/reassignComplaint', 
+  authenticate, 
+  authorise(['admin']), 
+  reassignComplaint
+);
+
+router.put('/updateComplaintStatus', 
+  authenticate, 
+  authorise(['admin']), 
+  updateComplaintStatus
+);
+
+// Audit Logs Route
+router.get('/getAuditLogs', 
+  authenticate, 
+  authorise(['admin']), 
+  getAuditLogs
+);
+
+module.exports = router;

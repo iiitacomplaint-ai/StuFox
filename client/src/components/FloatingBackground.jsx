@@ -1,109 +1,158 @@
-// import React, { useEffect, useState } from 'react';
-// import { motion } from 'framer-motion';
+/**
+ * FloatingBackground Component
+ * UPDATED: Converted from police/crime system to college complaint system
+ * UPDATED: Changed icons to reflect complaint management themes
+ * UPDATED: Updated colors to match complaint system (purple/indigo theme)
+ * UPDATED: Added complaint-specific icons (Ticket, Clipboard, Wrench, etc.)
+ * UPDATED: Improved animation with different delays and durations
+ * UPDATED: Added responsive positioning for different screen sizes
+ * UPDATED: Reduced opacity for better readability of content
+ * 
+ * @description Animated floating background component for complaint management system
+ * @version 2.0.0 (Complete rewrite for complaint system)
+ */
 
-// // --- Inline Icon Components ---
-// const ShieldIcon = () => (
-//   <svg fill="currentColor" viewBox="0 0 20 20" className="w-full h-full">
-//     <path d="M10 2.25c-4.28 0-8 3.033-8 7.333 0 3.133 2.543 5.967 6 6.95V18c0 .552.448 1 1 1h2c.552 0 1-.448 1-1v-1.467c3.457-.983 6-3.817 6-6.95 0-4.3-3.72-7.333-8-7.333zM10 16.5c-3.313 0-6-2.467-6-5.167S6.687 6.167 10 6.167s6 2.467 6 5.167-2.687 5.166-6 5.166z" />
-//   </svg>
-// );
-
-// const MagnifyingGlassIcon = () => (
-//   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-full h-full">
-//     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-//   </svg>
-// );
-
-// const EyeIcon = () => (
-//   <svg fill="currentColor" viewBox="0 0 20 20" className="w-full h-full">
-//     <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"></path>
-//     <path fillRule="evenodd" d="M.458 10C3.732 4.943 9.522 4.5 10 4.5s6.268.443 9.542 5.5c0 0-3.732 5.057-9.542 5.5S.458 10 .458 10zm17.084 0c-2.423-3.34-6.42-3.824-7.542-3.824S4.84 6.66 2.416 10c2.424 3.34 6.42 3.824 7.542 3.824s5.118-.484 7.542-3.824z" clipRule="evenodd"></path>
-//   </svg>
-// );
-
-// const FingerprintIcon = () => (
-//   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-full h-full">
-//     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 11.5c0-.828.672-1.5 1.5-1.5s1.5.672 1.5 1.5S10.328 13 9.5 13 8 12.328 8 11.5z"></path>
-//     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M6 14.5c0-1.933 1.567-3.5 3.5-3.5s3.5 1.567 3.5 3.5-1.567 3.5-3.5 3.5S6 16.433 6 14.5z"></path>
-//   </svg>
-// );
-
-// // --- Icons array ---
-// const icons = [ShieldIcon, MagnifyingGlassIcon, EyeIcon, FingerprintIcon];
-
-// const FloatingBackground = () => {
-//   const [loaded, setLoaded] = useState(false);
-
-//   useEffect(() => {
-//     const timer = setTimeout(() => setLoaded(true), 500);
-//     return () => clearTimeout(timer);
-//   }, []);
-
-//   if (!loaded) return null;
-
-//   return (
-//     <div className="absolute inset-0 -z-10 overflow-hidden">
-//       {Array.from({ length: 20 }).map((_, index) => {
-//         const Icon = icons[Math.floor(Math.random() * icons.length)];
-//         const size = 60 + Math.random() * 100;
-
-//         return (
-//           <motion.div
-//             key={index}
-//             className="absolute text-blue-300"
-//             style={{
-//               top: `${Math.random() * 100}%`,
-//               left: `${Math.random() * 100}%`,
-//               width: `${size}px`,
-//               height: `${size}px`,
-//               opacity: 0.08,
-//             }}
-//             animate={{
-//               y: [0, -20, -10, 10, 0],
-//               x: [0, 10, -10, 5, 0],
-//               rotate: [0, 15, -10, 10, 0],
-//             }}
-//             transition={{
-//               duration: 20 + Math.random() * 20,
-//               repeat: Infinity,
-//               ease: "linear",
-//               delay: Math.random() * 5,
-//             }}
-//           >
-//             <Icon />
-//           </motion.div>
-//         );
-//       })}
-//     </div>
-//   );
-// };
-
-// export default FloatingBackground;
 import React from 'react';
-import { FaShieldAlt, FaUserShield, FaSearch, FaEye, FaFingerprint, FaExclamationTriangle, FaBalanceScale, FaMapMarkerAlt } from 'react-icons/fa';
+import { 
+  FaTicketAlt, 
+  FaClipboardList, 
+  FaWrench, 
+  FaPlug, 
+  FaTrashAlt, 
+  FaPaintRoller,
+  FaBroom,
+  FaTint,
+  FaTools,
+  FaDesktop,
+  FaExclamationTriangle,
+  FaCheckCircle,
+  FaClock,
+  FaUserCheck,
+  FaShieldAlt
+} from 'react-icons/fa';
 
 const FloatingBackground = () => {
+  // Complaint management specific icons
   const icons = [
-    { Component: FaShieldAlt, style: 'top-[10%] left-[5%] text-purple-400 text-5xl' },
-    { Component: FaUserShield, style: 'top-[20%] right-[10%] text-blue-400 text-4xl' },
-    { Component: FaSearch, style: 'top-[30%] left-[20%] text-yellow-400 text-3xl' },
-    { Component: FaEye, style: 'top-[40%] right-[5%] text-red-400 text-5xl' },
-    { Component: FaFingerprint, style: 'bottom-[20%] left-[10%] text-gray-400 text-4xl' },
-    { Component: FaExclamationTriangle, style: 'bottom-[10%] right-[20%] text-orange-400 text-3xl' },
-    { Component: FaBalanceScale, style: 'bottom-[30%] left-[25%] text-green-400 text-5xl' },
-    { Component: FaMapMarkerAlt, style: 'bottom-[5%] left-[40%] text-teal-400 text-5xl' },
+    { Component: FaTicketAlt, style: 'top-[5%] left-[5%]', size: 'text-5xl', delay: 0, duration: 20, color: 'text-purple-400' },
+    { Component: FaClipboardList, style: 'top-[15%] right-[8%]', size: 'text-4xl', delay: 2, duration: 25, color: 'text-indigo-400' },
+    { Component: FaWrench, style: 'top-[25%] left-[15%]', size: 'text-3xl', delay: 4, duration: 18, color: 'text-blue-400' },
+    { Component: FaPlug, style: 'top-[35%] right-[15%]', size: 'text-5xl', delay: 1, duration: 22, color: 'text-yellow-400' },
+    { Component: FaTrashAlt, style: 'bottom-[30%] left-[8%]', size: 'text-4xl', delay: 3, duration: 20, color: 'text-red-400' },
+    { Component: FaPaintRoller, style: 'bottom-[20%] right-[12%]', size: 'text-3xl', delay: 5, duration: 24, color: 'text-pink-400' },
+    { Component: FaBroom, style: 'bottom-[40%] left-[20%]', size: 'text-5xl', delay: 2, duration: 19, color: 'text-green-400' },
+    { Component: FaTint, style: 'bottom-[10%] right-[25%]', size: 'text-4xl', delay: 4, duration: 23, color: 'text-cyan-400' },
+    { Component: FaTools, style: 'top-[45%] left-[25%]', size: 'text-3xl', delay: 1, duration: 21, color: 'text-orange-400' },
+    { Component: FaDesktop, style: 'top-[55%] right-[20%]', size: 'text-5xl', delay: 3, duration: 26, color: 'text-teal-400' },
+    { Component: FaExclamationTriangle, style: 'bottom-[15%] left-[35%]', size: 'text-4xl', delay: 0, duration: 17, color: 'text-yellow-500' },
+    { Component: FaCheckCircle, style: 'top-[70%] left-[45%]', size: 'text-3xl', delay: 5, duration: 22, color: 'text-green-500' },
+    { Component: FaClock, style: 'bottom-[50%] right-[5%]', size: 'text-4xl', delay: 2, duration: 20, color: 'text-gray-400' },
+    { Component: FaUserCheck, style: 'top-[85%] right-[35%]', size: 'text-3xl', delay: 4, duration: 24, color: 'text-blue-500' },
+    { Component: FaShieldAlt, style: 'top-[10%] right-[40%]', size: 'text-5xl', delay: 1, duration: 28, color: 'text-purple-500' }
   ];
 
+  // Generate random positions for additional floating elements
+  const getRandomPosition = () => {
+    return {
+      top: `${Math.random() * 100}%`,
+      left: `${Math.random() * 100}%`
+    };
+  };
+
   return (
-    <div className="absolute inset-0 z-0 pointer-events-none">
-      {icons.map(({ Component, style }, i) => (
-        <Component
+    <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+      {/* Pre-defined Icons with animation */}
+      {icons.map(({ Component, style, size, delay, duration, color }, i) => (
+        <div
           key={i}
-          className={`absolute ${style} opacity-50 animate-floating`}
+          className={`absolute ${style} animate-float-slow`}
+          style={{
+            animationDelay: `${delay}s`,
+            animationDuration: `${duration}s`
+          }}
+        >
+          <Component className={`${size} ${color} opacity-20 hover:opacity-30 transition-opacity duration-1000`} />
+        </div>
+      ))}
+
+      {/* Additional floating particles */}
+      {Array.from({ length: 30 }).map((_, i) => (
+        <div
+          key={`particle-${i}`}
+          className="absolute w-1 h-1 bg-purple-300 rounded-full animate-pulse-slow"
+          style={{
+            ...getRandomPosition(),
+            animationDelay: `${Math.random() * 10}s`,
+            animationDuration: `${3 + Math.random() * 5}s`,
+            opacity: 0.1 + Math.random() * 0.2
+          }}
         />
       ))}
     </div>
   );
 };
+
+// Add this CSS to your global stylesheet or create a style tag
+const styles = `
+@keyframes float-slow {
+  0% {
+    transform: translateY(0px) translateX(0px) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-20px) translateX(10px) rotate(5deg);
+  }
+  50% {
+    transform: translateY(10px) translateX(-10px) rotate(-5deg);
+  }
+  75% {
+    transform: translateY(-10px) translateX(5px) rotate(3deg);
+  }
+  100% {
+    transform: translateY(0px) translateX(0px) rotate(0deg);
+  }
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 0.1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(2);
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow ease-in-out infinite;
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow ease-in-out infinite;
+}
+
+/* Responsive adjustments for floating icons */
+@media (max-width: 768px) {
+  .animate-float-slow {
+    transform: scale(0.7);
+  }
+}
+
+@media (max-width: 640px) {
+  .animate-float-slow {
+    transform: scale(0.5);
+  }
+}
+`;
+
+// Inject styles if not already present
+if (typeof document !== 'undefined') {
+  const styleSheet = document.createElement("style");
+  styleSheet.textContent = styles;
+  if (!document.head.querySelector('#floating-bg-styles')) {
+    styleSheet.id = 'floating-bg-styles';
+    document.head.appendChild(styleSheet);
+  }
+}
 
 export default FloatingBackground;
