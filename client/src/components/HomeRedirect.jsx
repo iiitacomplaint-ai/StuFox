@@ -21,7 +21,7 @@ const HomeRedirect = () => {
       const role = getRole();
       switch (role) {
         case 'admin':
-          navigate('/admin/dashboard', { replace: true });
+          navigate('/admindashboard', { replace: true });
           break;
         case 'user':
           navigate('/user/dashboard', { replace: true });
@@ -33,14 +33,23 @@ const HomeRedirect = () => {
           // If no valid role, remove token and redirect to landing page
           localStorage.removeItem('token');
           localStorage.removeItem('user');
-          navigate('/', { replace: true });
+          navigate('/landingpage', { replace: true });
       }
     } else {
-      navigate('/', { replace: true });
+      // No token, go to landing page
+      navigate('/landingpage', { replace: true });
     }
   }, [navigate]);
 
-  return null;
+  // Show loading spinner while redirecting
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-purple-50 to-blue-50">
+      <div className="text-center">
+        <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="text-gray-600">Redirecting...</p>
+      </div>
+    </div>
+  );
 };
 
 export default HomeRedirect;

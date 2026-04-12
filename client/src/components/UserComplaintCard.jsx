@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, XCircle, RefreshCw, TrendingUp, AlertTriangle } from 'lucide-react';
+import { Eye, XCircle, RefreshCw, TrendingUp, AlertTriangle, Image, Video, FileText, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 const UserComplaintCard = ({ 
@@ -18,6 +18,8 @@ const UserComplaintCard = ({
   const [reopenReason, setReopenReason] = useState('');
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [showReopenModal, setShowReopenModal] = useState(false);
+  const [showMediaModal, setShowMediaModal] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState(null);
 
   const getStatusBadgeColor = (status) => {
     const colors = {
@@ -83,6 +85,26 @@ const UserComplaintCard = ({
     setShowPriorityModal(false);
   };
 
+  const getMediaType = (url) => {
+    if (url.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/i)) return 'image';
+    if (url.match(/\.(mp4|mov|avi|mkv|webm)$/i)) return 'video';
+    return 'other';
+  };
+
+  const getMediaIcon = (url) => {
+    const type = getMediaType(url);
+    if (type === 'image') return <Image className="h-4 w-4" />;
+    if (type === 'video') return <Video className="h-4 w-4" />;
+    return <FileText className="h-4 w-4" />;
+  };
+
+  const handleMediaClick = (mediaUrl) => {
+    setSelectedMedia(mediaUrl);
+    setShowMediaModal(true);
+  };
+
+  const mediaUrls = complaint.media_urls || [];
+
   return (
     <>
       <div className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all bg-white">
@@ -99,6 +121,54 @@ const UserComplaintCard = ({
               </span>
             </div>
             <p className="text-sm text-gray-600 line-clamp-2">{complaint.description}</p>
+            
+            {/* Media Preview Thumbnails */}
+            {mediaUrls.length > 0 && (
+              <div className="flex gap-2 mt-3 flex-wrap">
+                {mediaUrls.slice(0, 3).map((url, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleMediaClick(url)}
+                    className="relative group cursor-pointer"
+                  >
+                    {getMediaType(url) === 'image' ? (
+                      <div className="relative">
+                        <img
+                          src={url}
+                          alt={`Media ${idx + 1}`}
+                          className="h-12 w-12 object-cover rounded border border-gray-200 hover:border-purple-500 transition-all"
+                        />
+                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 rounded transition-all flex items-center justify-center">
+                          <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </div>
+                    ) : getMediaType(url) === 'video' ? (
+                      <div className="relative">
+                        <video className="h-12 w-12 object-cover rounded border border-gray-200">
+                          <source src={url} />
+                        </video>
+                        <div className="absolute inset-0 bg-black bg-opacity-40 rounded flex items-center justify-center">
+                          <Video className="h-5 w-5 text-white" />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-12 w-12 bg-gray-100 rounded border border-gray-200 flex items-center justify-center">
+                        <FileText className="h-5 w-5 text-gray-500" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+                {mediaUrls.length > 3 && (
+                  <button
+                    onClick={() => handleMediaClick(mediaUrls[3])}
+                    className="h-12 w-12 bg-gray-100 rounded border border-gray-200 flex items-center justify-center text-xs font-medium text-gray-600 hover:bg-gray-200 transition-colors"
+                  >
+                    +{mediaUrls.length - 3}
+                  </button>
+                )}
+              </div>
+            )}
+            
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-500">
               <span>ID: #{complaint.complaint_id}</span>
               <span>Category: {complaint.category}</span>
@@ -151,6 +221,90 @@ const UserComplaintCard = ({
           </div>
         </div>
       </div>
+
+      {/* Media Full View Modal */}
+      {showMediaModal && selectedMedia && (
+        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
+          <div className="relative max-w-5xl w-full max-h-[90vh]">
+            <button
+              onClick={() => {
+                setShowMediaModal(false);
+                setSelectedMedia(null);
+              }}
+              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
+            >
+              <X className="h-8 w-8" />
+            </button>
+            
+            {getMediaType(selectedMedia) === 'image' ? (
+              <img
+                src={selectedMedia}
+                alt="Full view"
+                className="w-full h-full object-contain rounded-lg"
+              />
+            ) : getMediaType(selectedMedia) === 'video' ? (
+              <video
+                src={selectedMedia}
+                controls
+                autoPlay
+                className="w-full h-full rounded-lg"
+              >
+                Your browser does not support the video tag.
+              </video>
+            ) : (
+              <div className="bg-white rounded-lg p-8 text-center">
+                <FileText className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 mb-4">This file type cannot be previewed</p>
+                <a
+                  href={selectedMedia}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                >
+                  Download File
+                </a>
+              </div>
+            )}
+            
+            {/* Navigation buttons for multiple media */}
+            {mediaUrls.length > 1 && (
+              <>
+                <button
+                  onClick={() => {
+                    const currentIndex = mediaUrls.indexOf(selectedMedia);
+                    const prevIndex = currentIndex === 0 ? mediaUrls.length - 1 : currentIndex - 1;
+                    setSelectedMedia(mediaUrls[prevIndex]);
+                  }}
+                  className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-full p-2 transition-all"
+                >
+                  <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => {
+                    const currentIndex = mediaUrls.indexOf(selectedMedia);
+                    const nextIndex = currentIndex === mediaUrls.length - 1 ? 0 : currentIndex + 1;
+                    setSelectedMedia(mediaUrls[nextIndex]);
+                  }}
+                  className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-full p-2 transition-all"
+                >
+                  <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </>
+            )}
+            
+            {/* Media counter */}
+            {mediaUrls.length > 1 && (
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-50 text-white px-3 py-1 rounded-full text-sm">
+                {mediaUrls.indexOf(selectedMedia) + 1} / {mediaUrls.length}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Withdraw Modal */}
       {showWithdrawModal && (
