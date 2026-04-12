@@ -129,6 +129,8 @@ const getMyComplaints = async (req, res) => {
         c.status,
         c.media_urls,
         c.remark,
+        c.withdrawal_reason,
+        c.reopened_at,
         c.created_at,
         c.updated_at,
         w.name as worker_name,
@@ -311,6 +313,7 @@ const getComplaintHistory = async (req, res) => {
         sh.id,
         sh.old_status,
         sh.new_status,
+        sh.remark,
         sh.changed_at,
         u.name as changed_by_name,
         u.role as changed_by_role
@@ -339,18 +342,26 @@ const getComplaintHistory = async (req, res) => {
   }
 };
 
-// 5. CANCEL COMPLAINT (Only if status is 'Submitted')
-const cancelComplaint = async (req, res) => {
+// 5. WITHDRAW COMPLAINT (New - withdraw complaint before it's processed)
+const withdrawComplaint = async (req, res) => {
   const client = await pool.connect();
   
   try {
     const userId = req.user.user_id;
     const { complaint_id } = req.params;
+    const { reason } = req.body;
     
     if (!complaint_id || isNaN(complaint_id)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid complaint ID'
+      });
+    }
+    
+    if (!reason || reason.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'Withdrawal reason is required'
       });
     }
     
@@ -367,34 +378,39 @@ const cancelComplaint = async (req, res) => {
     if (!ownershipCheck.owned) {
       return res.status(403).json({
         success: false,
-        message: 'Access denied. You can only cancel your own complaints.'
+        message: 'Access denied. You can only withdraw your own complaints.'
       });
     }
     
-    // Check if complaint can be cancelled (only 'Submitted' status)
-    if (ownershipCheck.complaint.status !== 'Submitted') {
+    // Check if complaint can be withdrawn (only 'Submitted' or 'Assigned' status)
+    const withdrawableStatuses = ['Submitted', 'Assigned'];
+    if (!withdrawableStatuses.includes(ownershipCheck.complaint.status)) {
       return res.status(400).json({
         success: false,
-        message: `Complaint cannot be cancelled because status is '${ownershipCheck.complaint.status}'. Only 'Submitted' complaints can be cancelled.`
+        message: `Complaint cannot be withdrawn because status is '${ownershipCheck.complaint.status}'. Only 'Submitted' or 'Assigned' complaints can be withdrawn.`
       });
     }
     
     await client.query('BEGIN');
     
-    // Update complaint status to 'Closed' (cancelled)
+    // Update complaint status to 'Withdrawn'
     const updateResult = await client.query(
       `UPDATE complaints 
-       SET status = 'Closed', updated_at = CURRENT_TIMESTAMP
-       WHERE complaint_id = $1
+       SET status = 'Withdrawn', 
+           withdrawal_reason = $1,
+           assigned_to = NULL,
+           remark = COALESCE(remark, '') || '\n[WITHDRAWN] ' || $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE complaint_id = $2
        RETURNING *`,
-      [complaint_id]
+      [reason, complaint_id]
     );
     
     // Insert into status_history
     await client.query(
-      `INSERT INTO status_history (complaint_id, old_status, new_status, changed_by)
-       VALUES ($1, $2, $3, $4)`,
-      [complaint_id, 'Submitted', 'Closed', userId]
+      `INSERT INTO status_history (complaint_id, old_status, new_status, changed_by, remark)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [complaint_id, ownershipCheck.complaint.status, 'Withdrawn', userId, reason]
     );
     
     // Insert into audit_logs
@@ -403,11 +419,11 @@ const cancelComplaint = async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         userId,
-        'CANCEL_COMPLAINT',
+        'WITHDRAW_COMPLAINT',
         'complaints',
         complaint_id,
-        JSON.stringify({ status: 'Submitted' }),
-        JSON.stringify({ status: 'Closed', reason: 'Cancelled by user' })
+        JSON.stringify({ status: ownershipCheck.complaint.status }),
+        JSON.stringify({ status: 'Withdrawn', reason: reason })
       ]
     );
     
@@ -415,16 +431,16 @@ const cancelComplaint = async (req, res) => {
     
     return res.status(200).json({
       success: true,
-      message: 'Complaint cancelled successfully',
+      message: 'Complaint withdrawn successfully',
       data: updateResult.rows[0]
     });
     
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Error cancelling complaint:', error);
+    console.error('Error withdrawing complaint:', error);
     return res.status(500).json({
       success: false,
-      message: 'Server error while cancelling complaint',
+      message: 'Server error while withdrawing complaint',
       error: error.message
     });
   } finally {
@@ -432,18 +448,26 @@ const cancelComplaint = async (req, res) => {
   }
 };
 
-// 6. REOPEN COMPLAINT (Optional - only after Resolved, not after Closed)
+// 6. REOPEN COMPLAINT (Updated - only for Withdrawn status)
 const reopenComplaint = async (req, res) => {
   const client = await pool.connect();
   
   try {
     const userId = req.user.user_id;
     const { complaint_id } = req.params;
+    const { reason } = req.body;
     
     if (!complaint_id || isNaN(complaint_id)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid complaint ID'
+      });
+    }
+    
+    if (!reason || reason.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'Reopen reason is required'
       });
     }
     
@@ -464,30 +488,35 @@ const reopenComplaint = async (req, res) => {
       });
     }
     
-    // Check if complaint can be reopened (only 'Resolved' status)
-    if (ownershipCheck.complaint.status !== 'Resolved') {
+    // Check if complaint can be reopened (only 'Withdrawn' status)
+    if (ownershipCheck.complaint.status !== 'Withdrawn') {
       return res.status(400).json({
         success: false,
-        message: `Complaint cannot be reopened because status is '${ownershipCheck.complaint.status}'. Only 'Resolved' complaints can be reopened.`
+        message: `Complaint cannot be reopened because status is '${ownershipCheck.complaint.status}'. Only 'Withdrawn' complaints can be reopened.`
       });
     }
     
     await client.query('BEGIN');
     
-    // Update complaint status back to 'In Progress'
+    // Update complaint status back to 'Submitted'
     const updateResult = await client.query(
       `UPDATE complaints 
-       SET status = 'In Progress', updated_at = CURRENT_TIMESTAMP
-       WHERE complaint_id = $1
+       SET status = 'Submitted', 
+           assigned_to = NULL,
+           withdrawal_reason = NULL,
+           remark = COALESCE(remark, '') || '\n[REOPENED] ' || $1,
+           reopened_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE complaint_id = $2
        RETURNING *`,
-      [complaint_id]
+      [reason, complaint_id]
     );
     
     // Insert into status_history
     await client.query(
-      `INSERT INTO status_history (complaint_id, old_status, new_status, changed_by)
-       VALUES ($1, $2, $3, $4)`,
-      [complaint_id, 'Resolved', 'In Progress', userId]
+      `INSERT INTO status_history (complaint_id, old_status, new_status, changed_by, remark)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [complaint_id, 'Withdrawn', 'Submitted', userId, reason]
     );
     
     // Insert into audit_logs
@@ -499,8 +528,8 @@ const reopenComplaint = async (req, res) => {
         'REOPEN_COMPLAINT',
         'complaints',
         complaint_id,
-        JSON.stringify({ status: 'Resolved' }),
-        JSON.stringify({ status: 'In Progress', reason: 'Reopened by user' })
+        JSON.stringify({ status: 'Withdrawn' }),
+        JSON.stringify({ status: 'Submitted', reason: reason })
       ]
     );
     
@@ -525,7 +554,13 @@ const reopenComplaint = async (req, res) => {
   }
 };
 
-// 7. GET DASHBOARD STATS (User's complaint statistics)
+// 7. CANCEL COMPLAINT (Deprecated - use withdraw instead, kept for backward compatibility)
+const cancelComplaint = async (req, res) => {
+  // Redirect to withdraw functionality
+  return withdrawComplaint(req, res);
+};
+
+// 8. GET DASHBOARD STATS (User's complaint statistics)
 const getDashboardStats = async (req, res) => {
   try {
     const userId = req.user.user_id;
@@ -539,6 +574,7 @@ const getDashboardStats = async (req, res) => {
         COUNT(*) FILTER (WHERE status = 'Resolved') as resolved,
         COUNT(*) FILTER (WHERE status = 'Closed') as closed,
         COUNT(*) FILTER (WHERE status = 'Escalated') as escalated,
+        COUNT(*) FILTER (WHERE status = 'Withdrawn') as withdrawn,
         COUNT(*) FILTER (WHERE priority = 'high') as high_priority,
         COUNT(*) FILTER (WHERE priority = 'medium') as medium_priority,
         COUNT(*) FILTER (WHERE priority = 'low') as low_priority
@@ -584,7 +620,7 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
-// 8. GET USER PROFILE
+// 9. GET USER PROFILE
 const getProfile = async (req, res) => {
   try {
     const userId = req.user.user_id;
@@ -618,14 +654,108 @@ const getProfile = async (req, res) => {
     });
   }
 };
+// 10. CHANGE COMPLAINT PRIORITY (Simplified - no history table)
+// 10. CHANGE COMPLAINT PRIORITY (Simplest - no extra tables)
+const changePriority = async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const { complaint_id } = req.params;
+    const { priority } = req.body;
+    
+    // Validate complaint ID
+    if (!complaint_id || isNaN(complaint_id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid complaint ID'
+      });
+    }
+    
+    // Validate priority
+    const validPriorities = ['low', 'medium', 'high'];
+    if (!priority || !validPriorities.includes(priority.toLowerCase())) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid priority. Must be one of: ${validPriorities.join(', ')}`
+      });
+    }
+    
+    const newPriority = priority.toLowerCase();
+    
+    // Verify complaint belongs to user and get current priority
+    const complaintCheck = await pool.query(
+      'SELECT user_id, status, priority FROM complaints WHERE complaint_id = $1',
+      [complaint_id]
+    );
+    
+    if (complaintCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Complaint not found'
+      });
+    }
+    
+    const complaint = complaintCheck.rows[0];
+    
+    // Check ownership
+    if (complaint.user_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only change priority of your own complaints.'
+      });
+    }
+    
+    // Check if priority is actually changing
+    if (complaint.priority === newPriority) {
+      return res.status(400).json({
+        success: false,
+        message: `Priority is already set to ${newPriority}`
+      });
+    }
+    
+    // Check if complaint can have priority changed
+    const allowedStatuses = ['Submitted', 'Assigned', 'In Progress'];
+    if (!allowedStatuses.includes(complaint.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot change priority when complaint status is '${complaint.status}'`
+      });
+    }
+    
+    // Simply update the priority
+    const updateResult = await pool.query(
+      `UPDATE complaints 
+       SET priority = $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE complaint_id = $2
+       RETURNING *`,
+      [newPriority, complaint_id]
+    );
+    
+    return res.status(200).json({
+      success: true,
+      message: `Priority changed from ${complaint.priority} to ${newPriority} successfully`,
+      data: updateResult.rows[0]
+    });
+    
+  } catch (error) {
+    console.error('Error changing complaint priority:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while changing complaint priority',
+      error: error.message
+    });
+  }
+};
 
 module.exports = {
   createComplaint,
   getMyComplaints,
   getComplaintDetails,
   getComplaintHistory,
-  cancelComplaint,
-  reopenComplaint,
+  cancelComplaint,      // Deprecated - kept for backward compatibility
+  withdrawComplaint,    // New - withdraw functionality
+  reopenComplaint,      // Updated - works with Withdrawn status
   getDashboardStats,
-  getProfile
+  getProfile,
+  changePriority
 };

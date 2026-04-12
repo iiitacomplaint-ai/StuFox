@@ -1,13 +1,11 @@
 /**
  * UserDashboard Component
  * UPDATED: Shows all complaints registered by the user
- * UPDATED: Each complaint has a button to view details
- * UPDATED: Includes add complaint button with popup form
- * UPDATED: Profile card removed from dashboard - only accessible via profile icon
- * UPDATED: Uses useLogoutUser hook for proper logout functionality
+ * UPDATED: Integrated with UserComplaintCard and UserSubmitComplaint components
+ * UPDATED: Includes withdraw, reopen, and change priority functionality
  *
  * @description Dashboard for users to view and manage their complaints
- * @version 3.4.0 (Integrated useLogoutUser hook)
+ * @version 4.0.0 (Modular components)
  */
 
 import React, { useState } from 'react';
@@ -23,7 +21,6 @@ import {
   Clock,
   AlertCircle,
   TrendingUp,
-  Eye,
   PlusCircle,
   X,
   AlertTriangle,
@@ -38,8 +35,13 @@ import {
   getMyComplaints,
   getDashboardStats,
   createComplaint,
+  withdrawComplaint,
+  reopenComplaint,
+  changeComplaintPriority,
 } from '../apicalls/userapi';
 import UserProfileCard from '../components/UserProfileCard';
+import UserComplaintCard from '../components/UserComplaintCard';
+import UserSubmitComplaint from '../components/UserSubmitComplaint';
 import LoadingPage from '../components/LoadingPage';
 import ErrorPage from '../components/ErrorPage';
 import useLogoutUser from '../utils/useLogoutUser';
@@ -50,7 +52,7 @@ const UserDashboard = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useSelector((state) => state.user.user);
-  const logout = useLogoutUser(); // Use the logout hook
+  const logout = useLogoutUser();
   const [showProfile, setShowProfile] = useState(false);
   const [showAddComplaint, setShowAddComplaint] = useState(false);
   const [selectedComplaint, setSelectedComplaint] = useState(null);
@@ -67,6 +69,7 @@ const UserDashboard = () => {
     data: complaintsData,
     isLoading: complaintsLoading,
     isError: complaintsError,
+    refetch,
   } = useQuery({
     queryKey: ['my-complaints', user?.user_id, filters],
     queryFn: () => getMyComplaints({ ...filters, page: 1, limit: 100 }),
@@ -100,6 +103,44 @@ const UserDashboard = () => {
     },
   });
 
+  // Withdraw complaint mutation
+  const withdrawComplaintMutation = useMutation({
+    mutationFn: ({ complaint_id, reason }) => withdrawComplaint(complaint_id, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['my-complaints']);
+      queryClient.invalidateQueries(['user-dashboard-stats']);
+      toast.success('Complaint withdrawn successfully');
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to withdraw complaint');
+    },
+  });
+
+  // Reopen complaint mutation
+  const reopenComplaintMutation = useMutation({
+    mutationFn: ({ complaint_id, reason }) => reopenComplaint(complaint_id, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['my-complaints']);
+      queryClient.invalidateQueries(['user-dashboard-stats']);
+      toast.success('Complaint reopened successfully');
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to reopen complaint');
+    },
+  });
+
+  // Change priority mutation
+  const changePriorityMutation = useMutation({
+    mutationFn: ({ complaint_id, priority }) => changeComplaintPriority(complaint_id, priority),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['my-complaints']);
+      toast.success('Priority changed successfully');
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to change priority');
+    },
+  });
+
   const complaintList = complaintsData?.complaints || [];
 
   // Calculate statistics from complaints
@@ -109,6 +150,7 @@ const UserDashboard = () => {
   const resolvedCount = complaintList.filter((c) => c.status === 'Resolved').length;
   const escalatedCount = complaintList.filter((c) => c.status === 'Escalated').length;
   const closedCount = complaintList.filter((c) => c.status === 'Closed').length;
+  const withdrawnCount = complaintList.filter((c) => c.status === 'Withdrawn').length;
 
   const stats = statsData?.statistics || {
     total_complaints: totalComplaints,
@@ -117,14 +159,15 @@ const UserDashboard = () => {
     resolved: resolvedCount,
     escalated: escalatedCount,
     closed: closedCount,
+    withdrawn: withdrawnCount,
   };
 
   const statusChartData = {
-    labels: ['Submitted', 'In Progress', 'Resolved', 'Escalated', 'Closed'],
+    labels: ['Submitted', 'In Progress', 'Resolved', 'Escalated', 'Closed', 'Withdrawn'],
     datasets: [
       {
-        data: [pendingCount, inProgressCount, resolvedCount, escalatedCount, closedCount],
-        backgroundColor: ['#F59E0B', '#3B82F6', '#10B981', '#EF4444', '#6B7280'],
+        data: [pendingCount, inProgressCount, resolvedCount, escalatedCount, closedCount, withdrawnCount],
+        backgroundColor: ['#F59E0B', '#3B82F6', '#10B981', '#EF4444', '#6B7280', '#F97316'],
         hoverOffset: 4,
       },
     ],
@@ -151,29 +194,8 @@ const UserDashboard = () => {
 
   const resolutionRate =
     stats.total_complaints > 0
-      ? Math.round((stats.resolved / stats.total_complaints) * 100)
+      ? Math.round(((stats.resolved || 0) / stats.total_complaints) * 100)
       : 0;
-
-  const getStatusBadgeColor = (status) => {
-    const colors = {
-      Submitted: 'bg-yellow-100 text-yellow-800',
-      Assigned: 'bg-blue-100 text-blue-800',
-      'In Progress': 'bg-purple-100 text-purple-800',
-      Resolved: 'bg-green-100 text-green-800',
-      Closed: 'bg-gray-100 text-gray-800',
-      Escalated: 'bg-red-100 text-red-800',
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800';
-  };
-
-  const getPriorityColor = (priority) => {
-    const colors = {
-      high: 'text-red-600',
-      medium: 'text-yellow-600',
-      low: 'text-green-600',
-    };
-    return colors[priority] || 'text-gray-600';
-  };
 
   // Get user initials for avatar
   const getUserInitials = () => {
@@ -202,7 +224,7 @@ const UserDashboard = () => {
 
   const handleLogout = () => {
     setShowUserMenu(false);
-    logout(); // This will handle token removal, state reset, toast, and navigation to '/'
+    logout();
   };
 
   if (complaintsLoading || statsLoading) {
@@ -215,7 +237,7 @@ const UserDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-8 pt-20">
-      {/* Profile Modal - only shown when clicking on profile from dropdown */}
+      {/* Profile Modal */}
       {showProfile && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto relative">
@@ -230,14 +252,16 @@ const UserDashboard = () => {
         </div>
       )}
 
+      {/* Add Complaint Modal */}
       {showAddComplaint && (
-        <AddComplaintModal
-          setShowAddComplaint={setShowAddComplaint}
+        <UserSubmitComplaint
+          setShowModal={setShowAddComplaint}
           onSubmit={createComplaintMutation}
           isLoading={createComplaintMutation.isPending}
         />
       )}
 
+      {/* Complaint Details Modal */}
       {selectedComplaint && (
         <ComplaintDetailsModal
           complaint={selectedComplaint}
@@ -256,7 +280,6 @@ const UserDashboard = () => {
           </div>
           
           <div className="flex items-center gap-3 shrink-0">
-            {/* Add Complaint Button */}
             <button
               onClick={() => setShowAddComplaint(true)}
               className="flex items-center justify-center gap-2 px-3 md:px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-md"
@@ -266,7 +289,7 @@ const UserDashboard = () => {
               <span className="sm:hidden">Add</span>
             </button>
 
-            {/* Profile Icon / Avatar Button */}
+            {/* Profile Icon */}
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
@@ -284,14 +307,9 @@ const UserDashboard = () => {
                 <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform duration-200 ${showUserMenu ? 'rotate-180' : ''}`} />
               </button>
 
-              {/* Dropdown Menu */}
               {showUserMenu && (
                 <>
-                  {/* Backdrop to close dropdown when clicking outside */}
-                  <div 
-                    className="fixed inset-0 z-40" 
-                    onClick={() => setShowUserMenu(false)}
-                  />
+                  <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
                   <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-100 z-50 overflow-hidden">
                     <div className="p-4 border-b border-gray-100">
                       <div className="flex items-center gap-3">
@@ -325,7 +343,6 @@ const UserDashboard = () => {
                       <button
                         onClick={() => {
                           setShowUserMenu(false);
-                          // Add settings navigation if needed
                           toast.info('Settings coming soon');
                         }}
                         className="w-full px-4 py-2 text-left text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-3"
@@ -337,7 +354,6 @@ const UserDashboard = () => {
                       <button
                         onClick={() => {
                           setShowUserMenu(false);
-                          // Add help navigation if needed
                           toast.info('Help section coming soon');
                         }}
                         className="w-full px-4 py-2 text-left text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-3"
@@ -363,45 +379,16 @@ const UserDashboard = () => {
           </div>
         </div>
 
-        {/* Dashboard Content - No Profile Card on left */}
+        {/* Dashboard Content */}
         <div className="space-y-6">
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 md:gap-4">
-            <StatCard
-              label="Total"
-              value={stats.total_complaints}
-              color="text-gray-800"
-              Icon={ClipboardList}
-              iconColor="text-purple-500"
-            />
-            <StatCard
-              label="Pending"
-              value={stats.pending}
-              color="text-yellow-600"
-              Icon={Clock}
-              iconColor="text-yellow-500"
-            />
-            <StatCard
-              label="In Progress"
-              value={stats.in_progress}
-              color="text-blue-600"
-              Icon={AlertCircle}
-              iconColor="text-blue-500"
-            />
-            <StatCard
-              label="Resolved"
-              value={stats.resolved}
-              color="text-green-600"
-              Icon={CheckCircle}
-              iconColor="text-green-500"
-            />
-            <StatCard
-              label="Escalated"
-              value={stats.escalated}
-              color="text-red-600"
-              Icon={AlertTriangle}
-              iconColor="text-red-500"
-            />
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4">
+            <StatCard label="Total" value={stats.total_complaints} color="text-gray-800" Icon={ClipboardList} iconColor="text-purple-500" />
+            <StatCard label="Pending" value={stats.pending} color="text-yellow-600" Icon={Clock} iconColor="text-yellow-500" />
+            <StatCard label="In Progress" value={stats.in_progress} color="text-blue-600" Icon={AlertCircle} iconColor="text-blue-500" />
+            <StatCard label="Resolved" value={stats.resolved} color="text-green-600" Icon={CheckCircle} iconColor="text-green-500" />
+            <StatCard label="Escalated" value={stats.escalated} color="text-red-600" Icon={AlertTriangle} iconColor="text-red-500" />
+            <StatCard label="Withdrawn" value={stats.withdrawn} color="text-orange-600" Icon={X} iconColor="text-orange-500" />
           </div>
 
           {/* Resolution Rate Card */}
@@ -411,7 +398,7 @@ const UserDashboard = () => {
                 <p className="text-purple-100 text-sm">Your Resolution Rate</p>
                 <p className="text-3xl font-bold">{resolutionRate}%</p>
                 <p className="text-purple-100 text-sm mt-1">
-                  {stats.resolved} out of {stats.total_complaints} complaints resolved
+                  {stats.resolved || 0} out of {stats.total_complaints} complaints resolved
                 </p>
               </div>
               <TrendingUp className="h-12 w-12 opacity-50 shrink-0" />
@@ -424,7 +411,7 @@ const UserDashboard = () => {
             </div>
           </div>
 
-          {/* Charts side by side */}
+          {/* Charts */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             <div className="bg-white p-6 rounded-xl shadow-sm">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">Monthly Activity</h3>
@@ -434,9 +421,7 @@ const UserDashboard = () => {
                   options={{
                     maintainAspectRatio: false,
                     responsive: true,
-                    scales: {
-                      y: { beginAtZero: true, ticks: { precision: 0 } },
-                    },
+                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
                     plugins: { legend: { display: false } },
                   }}
                 />
@@ -444,9 +429,7 @@ const UserDashboard = () => {
             </div>
 
             <div className="bg-white p-6 rounded-xl shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                Status Distribution
-              </h3>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Status Distribution</h3>
               <div className="h-64">
                 <Doughnut
                   data={statusChartData}
@@ -454,10 +437,7 @@ const UserDashboard = () => {
                     maintainAspectRatio: false,
                     responsive: true,
                     plugins: {
-                      legend: {
-                        position: 'bottom',
-                        labels: { boxWidth: 12, padding: 10, font: { size: 11 } },
-                      },
+                      legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } },
                     },
                   }}
                 />
@@ -480,6 +460,7 @@ const UserDashboard = () => {
                 <option value="Resolved">Resolved</option>
                 <option value="Closed">Closed</option>
                 <option value="Escalated">Escalated</option>
+                <option value="Withdrawn">Withdrawn</option>
               </select>
 
               <select
@@ -508,9 +489,7 @@ const UserDashboard = () => {
               </select>
 
               <button
-                onClick={() =>
-                  setFilters({ status: '', category: '', priority: '', date: '' })
-                }
+                onClick={() => setFilters({ status: '', category: '', priority: '', date: '' })}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800 border border-gray-200 rounded-lg hover:bg-gray-50"
               >
                 Clear Filters
@@ -541,12 +520,16 @@ const UserDashboard = () => {
             ) : (
               <div className="space-y-4">
                 {complaintList.map((complaint) => (
-                  <ComplaintCard
+                  <UserComplaintCard
                     key={complaint.complaint_id}
                     complaint={complaint}
                     onViewDetails={() => setSelectedComplaint(complaint)}
-                    getStatusBadgeColor={getStatusBadgeColor}
-                    getPriorityColor={getPriorityColor}
+                    onWithdraw={(id, reason) => withdrawComplaintMutation.mutate({ complaint_id: id, reason })}
+                    onReopen={(id, reason) => reopenComplaintMutation.mutate({ complaint_id: id, reason })}
+                    onPriorityChange={(id, priority) => changePriorityMutation.mutate({ complaint_id: id, priority })}
+                    isWithdrawing={withdrawComplaintMutation.isPending}
+                    isReopening={reopenComplaintMutation.isPending}
+                    isChangingPriority={changePriorityMutation.isPending}
                   />
                 ))}
               </div>
@@ -571,161 +554,6 @@ const StatCard = ({ label, value, color, Icon, iconColor }) => (
   </div>
 );
 
-// Complaint Card Component
-const ComplaintCard = ({ complaint, onViewDetails, getStatusBadgeColor, getPriorityColor }) => {
-  return (
-    <div className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-2">
-            <h4 className="font-semibold text-gray-800 break-words">{complaint.title}</h4>
-            <span
-              className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(
-                complaint.status
-              )}`}
-            >
-              {complaint.status}
-            </span>
-            <span className={`text-xs font-medium ${getPriorityColor(complaint.priority)}`}>
-              {complaint.priority?.toUpperCase()} Priority
-            </span>
-          </div>
-          <p className="text-sm text-gray-600 line-clamp-2">{complaint.description}</p>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-500">
-            <span>ID: #{complaint.complaint_id}</span>
-            <span>Category: {complaint.category}</span>
-            <span>Created: {new Date(complaint.created_at).toLocaleDateString()}</span>
-          </div>
-        </div>
-        <button
-          onClick={onViewDetails}
-          className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-1 shrink-0 w-full sm:w-auto"
-        >
-          <Eye className="h-4 w-4" />
-          View Details
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// Add Complaint Modal Component
-const AddComplaintModal = ({ setShowAddComplaint, onSubmit, isLoading }) => {
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    category: '',
-    priority: 'medium',
-  });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!formData.title || !formData.description || !formData.category) {
-      toast.error('Please fill all required fields');
-      return;
-    }
-    onSubmit.mutate(formData);
-  };
-
-  const categories = [
-    'Network',
-    'Cleaning',
-    'Carpentry',
-    'PC Maintenance',
-    'Plumbing',
-    'Electricity',
-  ];
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center p-6 border-b sticky top-0 bg-white z-10">
-          <h2 className="text-xl font-bold text-gray-800">Add New Complaint</h2>
-          <button
-            onClick={() => setShowAddComplaint(false)}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            <X className="h-6 w-6" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-            <input
-              type="text"
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              placeholder="Brief title of your complaint"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
-            <select
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              required
-            >
-              <option value="">Select Category</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-            <select
-              value={formData.priority}
-              onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-            >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              rows="5"
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-              placeholder="Detailed description of your complaint"
-              required
-            />
-          </div>
-
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={() => setShowAddComplaint(false)}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Submitting...' : 'Submit Complaint'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
 // Complaint Details Modal Component
 const ComplaintDetailsModal = ({ complaint, setSelectedComplaint }) => {
   const getStatusDetails = (status) => {
@@ -736,6 +564,7 @@ const ComplaintDetailsModal = ({ complaint, setSelectedComplaint }) => {
       Resolved: { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-800' },
       Closed: { bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-800' },
       Escalated: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-800' },
+      Withdrawn: { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-800' },
     };
     return details[status] || details['Submitted'];
   };
@@ -747,10 +576,7 @@ const ComplaintDetailsModal = ({ complaint, setSelectedComplaint }) => {
       <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center p-6 border-b sticky top-0 bg-white z-10">
           <h2 className="text-xl font-bold text-gray-800">Complaint Details</h2>
-          <button
-            onClick={() => setSelectedComplaint(null)}
-            className="text-gray-400 hover:text-gray-600"
-          >
+          <button onClick={() => setSelectedComplaint(null)} className="text-gray-400 hover:text-gray-600">
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -762,9 +588,7 @@ const ComplaintDetailsModal = ({ complaint, setSelectedComplaint }) => {
                 <h3 className="text-lg font-semibold break-words">{complaint.title}</h3>
                 <p className="text-sm text-gray-600 mt-1">ID: #{complaint.complaint_id}</p>
               </div>
-              <span
-                className={`px-3 py-1 rounded-full text-sm font-medium ${statusStyle.text} bg-white/60 shrink-0`}
-              >
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusStyle.text} bg-white/60 shrink-0`}>
                 {complaint.status}
               </span>
             </div>
@@ -777,15 +601,10 @@ const ComplaintDetailsModal = ({ complaint, setSelectedComplaint }) => {
             </div>
             <div>
               <label className="text-xs text-gray-500">Priority</label>
-              <p
-                className={`font-medium capitalize ${
-                  complaint.priority === 'high'
-                    ? 'text-red-600'
-                    : complaint.priority === 'medium'
-                    ? 'text-yellow-600'
-                    : 'text-green-600'
-                }`}
-              >
+              <p className={`font-medium capitalize ${
+                complaint.priority === 'high' ? 'text-red-600' :
+                complaint.priority === 'medium' ? 'text-yellow-600' : 'text-green-600'
+              }`}>
                 {complaint.priority}
               </p>
             </div>
@@ -796,19 +615,22 @@ const ComplaintDetailsModal = ({ complaint, setSelectedComplaint }) => {
             <div>
               <label className="text-xs text-gray-500">Last Updated</label>
               <p className="font-medium">
-                {complaint.updated_at
-                  ? new Date(complaint.updated_at).toLocaleString()
-                  : '—'}
+                {complaint.updated_at ? new Date(complaint.updated_at).toLocaleString() : '—'}
               </p>
             </div>
           </div>
 
           <div>
             <label className="text-xs text-gray-500">Description</label>
-            <p className="mt-1 text-gray-700 whitespace-pre-wrap break-words">
-              {complaint.description}
-            </p>
+            <p className="mt-1 text-gray-700 whitespace-pre-wrap break-words">{complaint.description}</p>
           </div>
+
+          {complaint.withdrawal_reason && (
+            <div className="p-3 rounded-lg bg-orange-50 border border-orange-200">
+              <label className="text-xs text-gray-500">Withdrawal Reason</label>
+              <p className="mt-1 text-gray-700">{complaint.withdrawal_reason}</p>
+            </div>
+          )}
 
           {complaint.assigned_to && (
             <div>
@@ -826,10 +648,7 @@ const ComplaintDetailsModal = ({ complaint, setSelectedComplaint }) => {
         </div>
 
         <div className="p-6 border-t bg-gray-50 sticky bottom-0">
-          <button
-            onClick={() => setSelectedComplaint(null)}
-            className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-          >
+          <button onClick={() => setSelectedComplaint(null)} className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
             Close
           </button>
         </div>

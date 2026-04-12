@@ -6,9 +6,11 @@ const {
   getComplaintDetails,
   getComplaintHistory,
   cancelComplaint,
+  withdrawComplaint,    // ✅ Add this
   reopenComplaint,
   getDashboardStats,
-  getProfile
+  getProfile,
+  changePriority
 } = require('../controller/userController');
 const { authenticate, authorise } = require('../middleware/authMiddleware');
 
@@ -27,7 +29,8 @@ router.get('/complaints/:complaint_id', getComplaintDetails);
 router.get('/complaints/:complaint_id/history', getComplaintHistory);
 
 // Complaint Action Routes
-router.put('/complaints/:complaint_id/cancel', cancelComplaint);
-router.put('/complaints/:complaint_id/reopen', reopenComplaint);
-
+router.put('/complaints/:complaint_id/cancel', cancelComplaint);      // Deprecated - kept for backward compatibility
+router.put('/complaints/:complaint_id/withdraw', withdrawComplaint);  // ✅ New - withdraw complaint
+router.put('/complaints/:complaint_id/reopen', reopenComplaint);      // Updated - works with Withdrawn status
+router.put('/complaints/:complaint_id/priority', changePriority);
 module.exports = router;

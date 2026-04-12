@@ -170,7 +170,7 @@ function SignupPage() {
       navigate("/workerdashboard", { replace: true });
       break;
     case "user":
-      navigate("/userdashboard", { replace: true });
+      navigate("/user/dashboard", { replace: true });
       break;
     default:
       toast.error("Invalid role. Redirecting to login.");
