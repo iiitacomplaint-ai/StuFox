@@ -3,7 +3,7 @@ const bcrypt = require('bcrypt');
 require('dotenv').config();
 const crypto = require('crypto');
 const { Resend } = require('resend');
-const { workerWelcome } = require('../utils/mailFormat');
+const { workerWelcome } = require('../utils/otp');
 
 // Initialize Resend with API key
 const resend = new Resend(process.env.RESEND_API_KEY);
