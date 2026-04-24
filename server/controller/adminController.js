@@ -2,20 +2,11 @@ const pool = require('../config/db');
 const bcrypt = require('bcrypt');
 require('dotenv').config();
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
-const { workerWelcome } = require('../utils/mailFormat'); // ✅ Import from mailFormat
+const { Resend } = require('resend');
+const { workerWelcome } = require('../utils/mailFormat');
 
-// Email transporter configuration
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
-
-// ❌ REMOVE this local workerWelcomeEmail function (lines 20-41)
-// You don't need it anymore since you're importing from mailFormat
+// Initialize Resend with API key
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Helper function to validate status transitions
 const isValidStatusTransition = (oldStatus, newStatus) => {
@@ -112,22 +103,33 @@ const createWorker = async (req, res) => {
     
     await client.query('COMMIT');
     
-    // Send email with credentials - ✅ Using imported workerWelcome
+    // Send email using Resend
     try {
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
-        to: email,
-        subject: 'Your Worker Account Credentials - College Complaint System',
-        html: workerWelcome(email, plainPassword, name, department), // ✅ Changed from workerWelcomeEmail
+      const emailHtml = workerWelcome(email, plainPassword, name, department);
+      
+      const { data, error } = await resend.emails.send({
+        from: process.env.RESEND_FROM_EMAIL || 'StuFix <onboarding@resend.dev>',
+        to: [email],
+        subject: 'Welcome to StuFix - Your Worker Account Credentials',
+        html: emailHtml,
       });
+
+      if (error) {
+        console.error('Resend API error:', error);
+        throw new Error(error.message);
+      }
+
+      console.log('Email sent successfully:', data);
       
       return res.status(201).json({
         success: true,
         message: 'Worker created successfully and credentials emailed.',
         data: newWorker
       });
+      
     } catch (emailError) {
       console.error('Email sending failed:', emailError);
+      // Don't fail the request if email fails, just log it
       return res.status(201).json({
         success: true,
         message: 'Worker created but email failed to send. Please share credentials manually.',
@@ -148,9 +150,8 @@ const createWorker = async (req, res) => {
   }
 };
 
-
+// Rest of your functions remain the same...
 // B. GET ALL WORKERS
-// Updated getWorkers function with performance metrics
 const getWorkers = async (req, res) => {
   try {
     const { department } = req.query;
@@ -185,7 +186,6 @@ const getWorkers = async (req, res) => {
     
     const result = await pool.query(query, values);
     
-    // Calculate efficiency for each worker
     const workersWithMetrics = result.rows.map(worker => {
       const totalResolved = parseInt(worker.resolved_count) || 0;
       const totalAssigned = parseInt(worker.total_assigned) || 0;
@@ -200,7 +200,7 @@ const getWorkers = async (req, res) => {
         escalated_count: parseInt(worker.escalated_count) || 0,
         total_assigned: totalAssigned,
         efficiency: efficiency,
-        avg_resolution_time: null // Can be calculated with more complex query
+        avg_resolution_time: null
       };
     });
     
@@ -235,7 +235,6 @@ const deleteWorker = async (req, res) => {
       });
     }
     
-    // Check if user exists and is a worker
     const workerCheck = await client.query(
       'SELECT user_id, name, email, role FROM users WHERE user_id = $1 AND role = $2',
       [user_id, 'worker']
@@ -250,7 +249,6 @@ const deleteWorker = async (req, res) => {
     
     await client.query('BEGIN');
     
-    // Log before deletion
     await client.query(
       `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value)
        VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -264,7 +262,6 @@ const deleteWorker = async (req, res) => {
       ]
     );
     
-    // Delete worker (CASCADE will handle related records)
     await client.query('DELETE FROM users WHERE user_id = $1', [user_id]);
     
     await client.query('COMMIT');
@@ -322,14 +319,12 @@ const getAllComplaints = async (req, res) => {
       values.push(priority);
     }
     
-    // Pagination
     const offset = (page - 1) * limit;
     query += ` ORDER BY c.created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
     values.push(limit, offset);
     
     const result = await pool.query(query, values);
     
-    // Get total count for pagination
     let countQuery = `SELECT COUNT(*) as total FROM complaints c WHERE 1=1`;
     const countValues = [];
     let countIndex = 1;
@@ -386,7 +381,6 @@ const assignComplaint = async (req, res) => {
       });
     }
     
-    // Check if complaint exists and get its category
     const complaintCheck = await client.query(
       'SELECT complaint_id, category, status FROM complaints WHERE complaint_id = $1',
       [complaint_id]
@@ -401,7 +395,6 @@ const assignComplaint = async (req, res) => {
     
     const complaint = complaintCheck.rows[0];
     
-    // Check if worker exists and get their department
     const workerCheck = await client.query(
       'SELECT user_id, name, department, role FROM users WHERE user_id = $1 AND role = $2',
       [worker_id, 'worker']
@@ -416,7 +409,6 @@ const assignComplaint = async (req, res) => {
     
     const worker = workerCheck.rows[0];
     
-    // Check if worker department matches complaint category
     if (worker.department !== complaint.category) {
       return res.status(400).json({
         success: false,
@@ -424,7 +416,6 @@ const assignComplaint = async (req, res) => {
       });
     }
     
-    // Check if complaint status allows assignment
     if (complaint.status !== 'Submitted') {
       return res.status(400).json({
         success: false,
@@ -434,7 +425,6 @@ const assignComplaint = async (req, res) => {
     
     await client.query('BEGIN');
     
-    // Update complaint
     const updateResult = await client.query(
       `UPDATE complaints 
        SET assigned_to = $1, status = 'Assigned', updated_at = CURRENT_TIMESTAMP
@@ -443,14 +433,12 @@ const assignComplaint = async (req, res) => {
       [worker_id, complaint_id]
     );
     
-    // Insert into status_history
     await client.query(
       `INSERT INTO status_history (complaint_id, old_status, new_status, changed_by)
        VALUES ($1, $2, $3, $4)`,
       [complaint_id, complaint.status, 'Assigned', req.user.user_id]
     );
     
-    // Insert into audit_logs
     await client.query(
       `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value)
        VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -499,7 +487,6 @@ const reassignComplaint = async (req, res) => {
       });
     }
     
-    // Get current complaint details
     const complaintCheck = await client.query(
       'SELECT complaint_id, category, assigned_to, status FROM complaints WHERE complaint_id = $1',
       [complaint_id]
@@ -521,14 +508,12 @@ const reassignComplaint = async (req, res) => {
       });
     }
     
-    // Get old worker details
     const oldWorkerCheck = await client.query(
       'SELECT user_id, name, department FROM users WHERE user_id = $1',
       [complaint.assigned_to]
     );
     const oldWorker = oldWorkerCheck.rows[0];
     
-    // Check new worker exists and department matches
     const newWorkerCheck = await client.query(
       'SELECT user_id, name, department FROM users WHERE user_id = $1 AND role = $2',
       [new_worker_id, 'worker']
@@ -543,7 +528,6 @@ const reassignComplaint = async (req, res) => {
     
     const newWorker = newWorkerCheck.rows[0];
     
-    // Check department match
     if (newWorker.department !== complaint.category) {
       return res.status(400).json({
         success: false,
@@ -553,7 +537,6 @@ const reassignComplaint = async (req, res) => {
     
     await client.query('BEGIN');
     
-    // Update complaint with new worker
     const updateResult = await client.query(
       `UPDATE complaints 
        SET assigned_to = $1, updated_at = CURRENT_TIMESTAMP
@@ -562,7 +545,6 @@ const reassignComplaint = async (req, res) => {
       [new_worker_id, complaint_id]
     );
     
-    // Insert into audit_logs
     await client.query(
       `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value)
        VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -611,7 +593,6 @@ const updateComplaintStatus = async (req, res) => {
       });
     }
     
-    // Validate status
     const validStatuses = ['Submitted', 'Assigned', 'In Progress', 'Resolved', 'Closed', 'Escalated'];
     if (!validStatuses.includes(new_status)) {
       return res.status(400).json({
@@ -620,7 +601,6 @@ const updateComplaintStatus = async (req, res) => {
       });
     }
     
-    // Get current complaint
     const complaintCheck = await client.query(
       'SELECT complaint_id, status, assigned_to FROM complaints WHERE complaint_id = $1',
       [complaint_id]
@@ -636,7 +616,6 @@ const updateComplaintStatus = async (req, res) => {
     const complaint = complaintCheck.rows[0];
     const old_status = complaint.status;
     
-    // Check if status transition is valid
     if (!isValidStatusTransition(old_status, new_status)) {
       return res.status(400).json({
         success: false,
@@ -644,7 +623,6 @@ const updateComplaintStatus = async (req, res) => {
       });
     }
     
-    // Additional validation: Can't close without being resolved
     if (new_status === 'Closed' && old_status !== 'Resolved') {
       return res.status(400).json({
         success: false,
@@ -654,7 +632,6 @@ const updateComplaintStatus = async (req, res) => {
     
     await client.query('BEGIN');
     
-    // Update complaint status
     const updateResult = await client.query(
       `UPDATE complaints 
        SET status = $1, updated_at = CURRENT_TIMESTAMP
@@ -663,14 +640,12 @@ const updateComplaintStatus = async (req, res) => {
       [new_status, complaint_id]
     );
     
-    // Insert into status_history
     await client.query(
       `INSERT INTO status_history (complaint_id, old_status, new_status, changed_by)
        VALUES ($1, $2, $3, $4)`,
       [complaint_id, old_status, new_status, req.user.user_id]
     );
     
-    // Insert into audit_logs
     await client.query(
       `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value)
        VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -738,14 +713,12 @@ const getAuditLogs = async (req, res) => {
       values.push(date);
     }
     
-    // Pagination
     const offset = (page - 1) * limit;
     query += ` ORDER BY al.created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
     values.push(limit, offset);
     
     const result = await pool.query(query, values);
     
-    // Get total count
     let countQuery = `SELECT COUNT(*) as total FROM audit_logs al WHERE 1=1`;
     const countValues = [];
     let countIndex = 1;
