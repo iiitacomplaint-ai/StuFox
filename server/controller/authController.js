@@ -3,17 +3,21 @@ const bcrypt = require('bcrypt');
 const { generateToken, generateOtpToken, verifyOtpToken } = require('../utils/utility');
 require('dotenv').config();
 const { mailFormat, setOtp, verifyOtp, generateOtp } = require('../utils/otp');
+const { Resend } = require('resend');
 
 const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
-const nodemailer = require('nodemailer');
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
+// Initialize Resend (remove nodemailer completely)
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+// REMOVE THIS ENTIRE BLOCK - No more nodemailer!
+// const transporter = nodemailer.createTransport({
+//   service: 'gmail',
+//   auth: {
+//     user: process.env.EMAIL_USER,
+//     pass: process.env.EMAIL_PASS
+//   }
+// });
 
 const sendotp = async (req, res) => {
   console.log('request received');
@@ -44,6 +48,15 @@ const sendotp = async (req, res) => {
     });
   }
 
+  // Check if Resend is configured
+  if (!process.env.RESEND_API_KEY) {
+    console.error('❌ RESEND_API_KEY not configured');
+    return res.status(500).json({
+      success: false,
+      message: 'Email service not configured. Please contact support.'
+    });
+  }
+
   try {
     // Check user existence based on type
     const userCheck = await pool.query(
@@ -68,8 +81,9 @@ const sendotp = async (req, res) => {
 
     // Generate OTP
     const otp = generateOtp();
+    console.log(`🔑 Generated OTP for ${email}: ${otp}`);
 
-    // Store OTP (await in case setOtp is async)
+    // Store OTP
     const result = await setOtp({ email, otp, type });
     if (!result || !result.status) {
       return res.status(500).json({
@@ -78,13 +92,27 @@ const sendotp = async (req, res) => {
       });
     }
 
-    // Send OTP email
-    await transporter.sendMail({
-      from: `"No Reply" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: 'Your OTP for requested action',
-      html: mailFormat(otp),
+    // Send OTP email using Resend (NOT nodemailer)
+    const emailHtml = mailFormat(otp);
+    
+    console.log(`📧 Sending OTP email to ${email} via Resend`);
+    
+    const { data, error } = await resend.emails.send({
+      from: process.env.RESEND_FROM_EMAIL || 'StuFix <onboarding@resend.dev>',
+      to: [email],
+      subject: 'StuFix - Your OTP Verification Code',
+      html: emailHtml,
     });
+
+    if (error) {
+      console.error('❌ Resend API Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to send OTP email. Please try again.'
+      });
+    }
+
+    console.log('✅ OTP email sent successfully:', data?.id);
 
     // Generate short-lived OTP token
     const otpToken = generateOtpToken({ email, type });
@@ -96,7 +124,7 @@ const sendotp = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Mail sending failed:', error);
+    console.error('❌ Mail sending failed:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to send OTP. Please try again after a while.',
@@ -105,6 +133,7 @@ const sendotp = async (req, res) => {
   }
 };
 
+// The rest of your functions (signup, login, resetPassword, etc.) remain exactly the same
 const signup = async (req, res) => {
   console.log("api hit");
   const { name, email, password, cnfpassword, phone_number, dob, otpToken } = req.body;
@@ -165,7 +194,7 @@ const signup = async (req, res) => {
       `INSERT INTO users (name, email, password, phone_number, dob, role)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING user_id, name, email, phone_number, dob, role, created_at`,
-      [name, email, hashedPassword, phone_number, dob, "user"] // ✅ "user" not "citizen"
+      [name, email, hashedPassword, phone_number, dob, "user"]
     );
 
     const newUser = userResult.rows[0];
@@ -197,7 +226,6 @@ const signup = async (req, res) => {
 const login = async (req, res) => {
   const { email, password } = req.body;
 
-  // Validate input early
   if (!email || !password) {
     return res.status(400).json({
       success: false,
@@ -206,7 +234,6 @@ const login = async (req, res) => {
   }
 
   try {
-    // Fetch user by email
     const result = await pool.query(
       'SELECT user_id, name, email, password, phone_number, role, department, created_at FROM users WHERE email = $1',
       [email]
@@ -214,7 +241,6 @@ const login = async (req, res) => {
 
     const user = result.rows[0];
 
-    // If user not found
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -222,7 +248,6 @@ const login = async (req, res) => {
       });
     }
 
-    // Compare password securely
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(401).json({
@@ -231,13 +256,9 @@ const login = async (req, res) => {
       });
     }
 
-    // Remove password from response
     const { password: _, ...safeUser } = user;
-
-    // Generate auth token
     const token = generateToken(safeUser);
 
-    // Return success response
     return res.status(200).json({
       success: true,
       message: 'Login successful.',
@@ -258,7 +279,6 @@ const login = async (req, res) => {
 const resetPassword = async (req, res) => {
   const { email, password, otpToken } = req.body;
 
-  // Validate inputs
   if (!email || !password || !otpToken) {
     return res.status(400).json({
       success: false,
@@ -267,10 +287,8 @@ const resetPassword = async (req, res) => {
   }
 
   try {
-    // 1. Verify OTP token
     const decoded = verifyOtpToken(otpToken);
 
-    // 2. Validate token contents
     if (!decoded || decoded.type !== 'reset' || decoded.email !== email) {
       return res.status(401).json({
         success: false,
@@ -278,7 +296,6 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    // 3. Check if user exists
     const result = await pool.query(
       'SELECT user_id, email FROM users WHERE email = $1',
       [email]
@@ -292,7 +309,6 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    // 4. Check password strength
     if (!strongPasswordRegex.test(password)) {
       return res.status(400).json({
         success: false,
@@ -300,18 +316,14 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    // 5. Hash new password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 6. Update password in DB
     const updateResult = await pool.query(
       'UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE email = $2 RETURNING user_id, name, email, phone_number, role, department',
       [hashedPassword, email]
     );
 
     const updatedUser = updateResult.rows[0];
-
-    // 7. Generate login token after reset
     const token = generateToken(updatedUser);
     
     return res.status(200).json({
@@ -339,14 +351,12 @@ const verifyOtpCont = async (req, res) => {
   }
 
   try {
-    // Verify OTP in your in-memory Map store
     const result = verifyOtp({ email, otp, type });
 
     if (!result.status) {
       return res.status(400).json({ success: false, message: result.message });
     }
 
-    // OTP is valid – generate otpToken for further use
     const otpToken = generateOtpToken({ email, type });
     
     return res.status(200).json({
@@ -365,7 +375,7 @@ const verifyOtpCont = async (req, res) => {
   }
 };
 
-// Optional: Get current user profile
+// Get current user profile
 const getProfile = async (req, res) => {
   try {
     const userId = req.user.user_id;
@@ -400,7 +410,7 @@ const getProfile = async (req, res) => {
   }
 };
 
-// Optional: Update user profile
+// Update user profile
 const updateProfile = async (req, res) => {
   try {
     const userId = req.user.user_id;
@@ -432,7 +442,7 @@ const updateProfile = async (req, res) => {
   }
 };
 
-// Optional: Change password
+// Change password
 const changePassword = async (req, res) => {
   const { current_password, new_password } = req.body;
   const userId = req.user.user_id;
@@ -444,7 +454,6 @@ const changePassword = async (req, res) => {
     });
   }
   
-  // Check password strength
   if (!strongPasswordRegex.test(new_password)) {
     return res.status(400).json({
       success: false,
@@ -453,7 +462,6 @@ const changePassword = async (req, res) => {
   }
   
   try {
-    // Get current password hash
     const result = await pool.query(
       'SELECT password FROM users WHERE user_id = $1',
       [userId]
@@ -461,7 +469,6 @@ const changePassword = async (req, res) => {
     
     const user = result.rows[0];
     
-    // Verify current password
     const isMatch = await bcrypt.compare(current_password, user.password);
     if (!isMatch) {
       return res.status(401).json({
@@ -470,10 +477,8 @@ const changePassword = async (req, res) => {
       });
     }
     
-    // Hash new password
     const hashedPassword = await bcrypt.hash(new_password, 10);
     
-    // Update password
     await pool.query(
       'UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
       [hashedPassword, userId]

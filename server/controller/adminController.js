@@ -103,8 +103,14 @@ const createWorker = async (req, res) => {
     
     await client.query('COMMIT');
     
-    // Send email using Resend
+    // Send email using Resend (moved to correct position after validation)
     try {
+      // Check if Resend is configured
+      if (!process.env.RESEND_API_KEY) {
+        console.error('❌ RESEND_API_KEY not configured');
+        throw new Error('Email service not configured');
+      }
+      
       const emailHtml = workerWelcome(email, plainPassword, name, department);
       
       const { data, error } = await resend.emails.send({
@@ -150,7 +156,6 @@ const createWorker = async (req, res) => {
   }
 };
 
-// Rest of your functions remain the same...
 // B. GET ALL WORKERS
 const getWorkers = async (req, res) => {
   try {
