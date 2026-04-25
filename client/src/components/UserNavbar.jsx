@@ -7,19 +7,21 @@
  * UPDATED: Updated dashboard route to /user/dashboard
  * UPDATED: Removed police/crime reporting references
  * UPDATED: Added complaint-specific navigation items
+ * UPDATED: Updated logo to StuFix branding
  * 
  * @description Navigation bar for regular users (students/staff) of the College Complaint Management System
- * @version 2.0.0 (Complete rewrite for complaint management)
+ * @version 3.0.0 (StuFix branding)
  */
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
-import { Building2, ClipboardList, LayoutDashboard, FileText, History, LogOut, User, Home, Info, Phone } from 'lucide-react';
+import { LogOut, User, Info, Phone, LayoutDashboard, Menu, X } from 'lucide-react';
 
 const UserNavbar = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const user = useSelector((state) => state.user.user);
 
     const [isScrolled, setIsScrolled] = useState(false);
@@ -27,9 +29,6 @@ const UserNavbar = () => {
 
     const navLinks = [
         { name: 'Dashboard', path: '/user/dashboard', icon: LayoutDashboard },
-        { name: 'My Complaints', path: '/user/complaints', icon: ClipboardList },
-        { name: 'New Complaint', path: '/user/new-complaint', icon: FileText },
-        { name: 'History', path: '/user/history', icon: History },
         { name: 'About', path: '/about', icon: Info },
         { name: 'Contact', path: '/contact', icon: Phone }
     ];
@@ -39,6 +38,8 @@ const UserNavbar = () => {
         window.addEventListener("scroll", handleScroll);
         return () => window.removeEventListener("scroll", handleScroll);
     }, []);
+
+    useEffect(() => setIsMenuOpen(false), [location.pathname]);
 
     const handleLogout = () => {
         localStorage.removeItem('token');
@@ -54,123 +55,118 @@ const UserNavbar = () => {
         return 'User';
     };
 
-    return (
-        <nav className={`fixed top-0 left-0 w-full flex items-center justify-between px-4 md:px-8 lg:px-16 xl:px-24 transition-all duration-300 z-50 ${
-            isScrolled 
-                ? "bg-white/90 shadow-lg backdrop-blur-lg py-3" 
-                : "bg-gradient-to-r from-purple-700 to-indigo-700 py-5"
-        }`}>
-            
-            {/* Logo */}
-            <div 
-                onClick={() => navigate('/user/dashboard')}
-                className="flex items-center gap-2 font-bold text-xl md:text-2xl group cursor-pointer"
-            >
-                <Building2 className={`h-7 w-7 md:h-8 md:w-8 transition-all duration-300 ${
-                    isScrolled ? "text-purple-600" : "text-white"
-                } group-hover:scale-110`} />
-                <span className={`transition-colors duration-300 ${
-                    isScrolled ? "bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent" : "text-white"
-                }`}>
-                    College Complaint
-                </span>
-            </div>
+    const navClasses = `
+        fixed top-0 left-0 w-full flex items-center justify-between
+        px-4 sm:px-6 lg:px-8 transition-all duration-300 ease-in-out z-50
+        ${isScrolled ? "bg-white/90 shadow-md backdrop-blur-lg py-3" : "bg-gradient-to-r from-purple-50 to-indigo-50 py-5"}
+    `;
 
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center gap-4 lg:gap-6">
-                {navLinks.map((link, i) => (
+    return (
+        <nav className={navClasses}>
+            <div className="flex items-center justify-between w-full max-w-7xl mx-auto">
+                {/* Logo */}
+                <Link 
+                    to='/user/dashboard' 
+                    className="flex items-center gap-2 font-bold text-2xl group cursor-pointer"
+                >
+                    <img 
+                        src="/favico.png" 
+                        alt="StuFix Logo" 
+                        className="h-8 w-8 object-contain group-hover:scale-110 transition-transform duration-300"
+                    />
+                    <span className="bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+                        StuFix
+                    </span>
+                </Link>
+
+                {/* Desktop Navigation Links */}
+                <div className="hidden md:flex items-center gap-8">
+                    {navLinks.map((link, i) => (
+                        <Link
+                            key={i}
+                            to={link.path}
+                            className="text-gray-700 hover:text-purple-600 transition-colors duration-300 font-medium flex items-center gap-2"
+                        >
+                            <link.icon className="h-4 w-4" />
+                            {link.name}
+                        </Link>
+                    ))}
+                </div>
+
+                {/* Desktop Right - User Info & Logout */}
+                <div className="hidden md:flex items-center gap-6">
+                    <div className={`flex items-center gap-3 px-4 py-2 rounded-full transition-all duration-300 ${
+                        isScrolled ? "bg-gray-100" : "bg-white/50 backdrop-blur-sm"
+                    }`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            isScrolled ? "bg-purple-100" : "bg-purple-100"
+                        }`}>
+                            <User className={`h-4 w-4 text-purple-600`} />
+                        </div>
+                        <div className="hidden lg:block">
+                            <p className="text-sm font-medium text-gray-800">
+                                {getUserName()}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                                Student
+                            </p>
+                        </div>
+                    </div>
+                    
                     <button
-                        key={i}
-                        onClick={() => navigate(link.path)}
-                        className={`group flex flex-col gap-0.5 focus:outline-none transition-colors duration-300 ${
-                            isScrolled ? "text-gray-700 hover:text-purple-600" : "text-white/90 hover:text-white"
+                        onClick={handleLogout}
+                        className={`flex items-center gap-2 px-5 py-2 rounded-full font-medium transition-all duration-300 ${
+                            isScrolled 
+                                ? "bg-red-500 hover:bg-red-600 text-white shadow-md" 
+                                : "bg-red-500 hover:bg-red-600 text-white shadow-md"
                         }`}
                     >
-                        <div className="flex items-center gap-2">
-                            <link.icon className="h-4 w-4" />
-                            <span className="text-sm font-medium">{link.name}</span>
-                        </div>
-                        <div className={`h-0.5 w-0 group-hover:w-full transition-all duration-300 ${
-                            isScrolled ? "bg-purple-600" : "bg-white"
-                        }`} />
+                        <LogOut className="h-4 w-4" />
+                        <span>Logout</span>
                     </button>
-                ))}
-            </div>
-
-            {/* Desktop Right - User Info & Logout */}
-            <div className="hidden md:flex items-center gap-4">
-                <div className={`flex items-center gap-3 px-4 py-2 rounded-full transition-all duration-300 ${
-                    isScrolled ? "bg-gray-100" : "bg-white/10 backdrop-blur-sm"
-                }`}>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                        isScrolled ? "bg-purple-100" : "bg-white/20"
-                    }`}>
-                        <User className={`h-4 w-4 ${isScrolled ? "text-purple-600" : "text-white"}`} />
-                    </div>
-                    <div className="hidden lg:block">
-                        <p className={`text-sm font-medium ${isScrolled ? "text-gray-800" : "text-white"}`}>
-                            {getUserName()}
-                        </p>
-                        <p className={`text-xs ${isScrolled ? "text-gray-500" : "text-white/70"}`}>
-                            Student
-                        </p>
-                    </div>
                 </div>
-                
-                <button
-                    onClick={handleLogout}
-                    className={`flex items-center gap-2 px-5 py-2 rounded-full font-medium transition-all duration-300 ${
-                        isScrolled 
-                            ? "bg-red-500 hover:bg-red-600 text-white shadow-md" 
-                            : "bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm"
-                    }`}
-                >
-                    <LogOut className="h-4 w-4" />
-                    <span>Logout</span>
-                </button>
-            </div>
 
-            {/* Mobile Menu Button */}
-            <div className="flex items-center gap-3 md:hidden">
-                <button
-                    onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    className={`p-2 rounded-lg transition-colors ${
-                        isScrolled ? "hover:bg-gray-100" : "hover:bg-white/10"
-                    }`}
-                    aria-label="Menu"
-                >
-                    <svg className={`h-6 w-6 ${isScrolled ? "text-gray-700" : "text-white"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
-                </button>
+                {/* Mobile Menu Button */}
+                <div className="flex items-center md:hidden">
+                    <button 
+                        onClick={() => setIsMenuOpen(!isMenuOpen)} 
+                        className="text-gray-800 p-2 hover:bg-purple-100 rounded-lg transition-colors"
+                        aria-label="Menu"
+                    >
+                        {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                    </button>
+                </div>
             </div>
 
             {/* Mobile Menu Panel */}
-            <div className={`fixed top-0 left-0 w-full h-screen bg-white flex flex-col md:hidden items-center justify-center gap-6 font-medium text-gray-800 transition-transform duration-500 ease-in-out z-50 ${
-                isMenuOpen ? "translate-x-0" : "-translate-x-full"
-            }`}>
+            <div className={`
+                fixed top-0 left-0 w-full h-screen bg-gradient-to-br from-purple-50 to-indigo-100
+                flex flex-col items-center justify-center gap-8
+                transition-transform duration-500 ease-in-out z-40
+                ${isMenuOpen ? "translate-x-0" : "-translate-x-full"}
+            `}>
                 <button 
-                    className="absolute top-6 right-6 p-2 hover:bg-gray-100 rounded-full transition-colors" 
+                    className="absolute top-6 right-6 p-2 hover:bg-purple-200 rounded-full transition-colors" 
                     onClick={() => setIsMenuOpen(false)}
                     aria-label="Close menu"
                 >
-                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <X className="h-7 w-7 text-gray-700" />
                 </button>
 
                 {/* Mobile Logo */}
-                <div className="absolute top-6 left-6">
-                    <div className="flex items-center gap-2">
-                        <Building2 className="h-7 w-7 text-purple-600" />
-                        <span className="font-bold text-lg bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-                            College Complaint
-                        </span>
-                    </div>
+                <div className="flex items-center gap-2 mb-4">
+                    <img 
+                        src="/favico.png" 
+                        alt="StuFix Logo" 
+                        className="h-10 w-10 object-contain"
+                    />
+                    <span className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+                        StuFix
+                    </span>
                 </div>
 
                 {/* Mobile User Info */}
-                <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl mb-4">
+                <div className="flex items-center gap-3 p-4 bg-white rounded-xl mb-4 w-64">
                     <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
                         <User className="h-6 w-6 text-purple-600" />
                     </div>
@@ -181,35 +177,40 @@ const UserNavbar = () => {
                 </div>
 
                 {/* Mobile Navigation Links */}
-                <div className="flex flex-col gap-4 w-full max-w-xs">
+                <div className="flex flex-col gap-6 text-center">
                     {navLinks.map((link, i) => (
-                        <button
+                        <Link
                             key={i}
-                            onClick={() => {
-                                navigate(link.path);
-                                setIsMenuOpen(false);
-                            }}
-                            className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-purple-50 hover:text-purple-600 rounded-lg transition-colors"
+                            to={link.path}
+                            onClick={() => setIsMenuOpen(false)}
+                            className="text-2xl font-semibold text-gray-800 hover:text-purple-600 transition-colors flex items-center justify-center gap-3"
                         >
-                            <link.icon className="h-5 w-5" />
-                            <span className="text-base">{link.name}</span>
-                        </button>
+                            <link.icon className="h-6 w-6" />
+                            {link.name}
+                        </Link>
                     ))}
+
+                    <div className="h-px bg-gray-300 w-48 mx-auto my-4"></div>
+
+                    {/* Mobile Logout */}
+                    <button
+                        onClick={() => {
+                            handleLogout();
+                            setIsMenuOpen(false);
+                        }}
+                        className="bg-red-500 hover:bg-red-600 text-white px-8 py-3 rounded-full text-xl font-semibold transition-all shadow-lg flex items-center justify-center gap-2"
+                    >
+                        <LogOut className="h-5 w-5" />
+                        Logout
+                    </button>
                 </div>
 
-                <div className="h-px w-48 bg-gray-200 my-4"></div>
-
-                {/* Mobile Logout */}
-                <button
-                    onClick={() => {
-                        handleLogout();
-                        setIsMenuOpen(false);
-                    }}
-                    className="flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-full font-medium transition-all duration-300 w-full max-w-xs"
-                >
-                    <LogOut className="h-4 w-4" />
-                    Logout
-                </button>
+                {/* Mobile Footer Info */}
+                <div className="absolute bottom-8 text-center text-sm text-gray-500">
+                    <p className="text-purple-600 font-semibold">StuFix - Student Complaint System</p>
+                    <p className="text-xs mt-1">Available Departments:</p>
+                    <p className="text-xs">Network | Cleaning | Carpentry | PC Maintenance | Plumbing | Electricity</p>
+                </div>
             </div>
         </nav>
     );

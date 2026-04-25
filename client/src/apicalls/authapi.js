@@ -64,11 +64,11 @@ export const verifyOtp = async (email, otp, type) => {
 // ✅ 3. Signup User
 export const signup = async (userData) => {
   try {
-    const response = await api.post(`/auth/signup`, userData);
+    const response = await api.post("/auth/signup", userData);
 
     if (response.data.success) {
-      toast.success(response.data.message || "User registered successfully!");
-
+      // Match login behavior exactly:
+      // store ONLY token, user will be fetched from token decode
       if (response.data.token) {
         localStorage.setItem("token", response.data.token);
       }
@@ -79,14 +79,21 @@ export const signup = async (userData) => {
         user: response.data.user,
       };
     } else {
-      toast.error(response.data.message || "Signup failed");
-      return { success: false };
+      return {
+        success: false,
+        message: response.data.message || "Signup failed",
+      };
     }
   } catch (error) {
     console.error("Signup error:", error);
-    const message = error.response?.data?.message || error.message || "Signup failed";
-    toast.error(message);
-    return { success: false };
+
+    return {
+      success: false,
+      message:
+        error.response?.data?.message ||
+        error.message ||
+        "Signup failed",
+    };
   }
 };
 

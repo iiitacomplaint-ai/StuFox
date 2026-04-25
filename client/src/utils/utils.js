@@ -1,70 +1,69 @@
-import { jwtDecode } from 'jwt-decode';
-
+import { jwtDecode } from "jwt-decode";
 
 const getToken = () => {
-    const result = localStorage.getItem("token");
-    return result;
+  return localStorage.getItem("token");
 };
 
 const getRole = () => {
-    try {
-        const token = localStorage.getItem("token");
-        if (!token) return null;
+  try {
+    const token = getToken();
+    if (!token) return null;
 
-        const decoded = jwtDecode(token);
-        return decoded.user_role || null
-    } catch (error) {
-        console.error("Failed to decode token:", error);
-        return null;
-    }
+    const decoded = jwtDecode(token);
+    return decoded.role || null;
+  } catch (error) {
+    console.error("Failed to decode token:", error);
+    return null;
+  }
 };
 
 const extractRole = (token) => {
+  try {
     if (!token) return null;
-    try {
-        const decoded = jwtDecode(token);
-        return decoded.user_role;
-    } catch (error) {
-        return null;
-    }
+
+    const decoded = jwtDecode(token);
+    return decoded.role || null;
+  } catch {
+    return null;
+  }
 };
 
-
- const getUserId = () => {
-    const token = localStorage.getItem("token");
-    if (!token) return null;
-    try {
-      const decoded = jwtDecode(token);
-      console.log(decoded.user_id);
-      return decoded.user_id;
-    } catch (error) {
-      return null;
-    }
-  };
-
- const isValidToken = () => {
-  const token = localStorage.getItem("token");
-  if (!token) return false;
-
+const getUserId = () => {
   try {
+    const token = getToken();
+    if (!token) return null;
+
+    const decoded = jwtDecode(token);
+    return decoded.user_id || null;
+  } catch {
+    return null;
+  }
+};
+
+const isValidToken = () => {
+  try {
+    const token = getToken();
+    if (!token) return false;
+
     const decoded = jwtDecode(token);
     const currentTime = Math.floor(Date.now() / 1000);
 
-    // Ensure decoded has exp field and is a number
-    if (decoded && typeof decoded.exp === 'number') {
-      return decoded.exp > currentTime;
-    } else {
-      console.error("Invalid token payload structure");
-      return false;
-    }
-
-  } catch (err) {
-    console.error("Token decoding error", err);
+    return decoded.exp && decoded.exp > currentTime;
+  } catch (error) {
+    console.error("Token decode error:", error);
     return false;
   }
 };
+
 const clearAuth = () => {
-    localStorage.removeItem("token");
+  localStorage.removeItem("token");
 };
 
-export { getToken, getRole, extractRole, clearAuth,getUserId ,isValidToken};
+export {
+  getToken,
+  getRole,
+  extractRole,
+  getUserId,
+  isValidToken,
+  clearAuth,
+};

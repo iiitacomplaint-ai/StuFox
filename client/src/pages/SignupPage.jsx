@@ -26,6 +26,24 @@ const emailSchema = z.object({
   email: z.string().email("Invalid email address"),
 });
 
+// ✅ Reusable role-based navigation helper (updated - removed localStorage)
+const navigateByRole = (role, navigate) => {
+  switch (role) {
+    case "admin":
+      navigate("/admin/dashboard", { replace: true });
+      break;
+    case "user":
+      navigate("/user/dashboard", { replace: true });
+      break;
+    case "worker":
+      navigate("/worker/dashboard", { replace: true });
+      break;
+    default:
+      toast.error("Invalid role. Redirecting to login.");
+      navigate("/login");
+  }
+};
+
 function SignupPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -35,6 +53,7 @@ function SignupPage() {
   const [otpToken, setOtpToken] = useState("");
   const [countdown, setCountdown] = useState(0);
   const [otpSent, setOtpSent] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [passwordStrength, setPasswordStrength] = useState({
     length: false,
@@ -121,7 +140,7 @@ function SignupPage() {
     },
   });
 
-  // ✅ Signup Mutation
+  // ✅ Signup Mutation - UPDATED with changes
   const signupMutation = useMutation({
     mutationFn: async ({ name, email, password, cnfpassword, phone_number, dob }) => {
       if (!name || !email || !phone_number || !dob) {
@@ -150,34 +169,40 @@ function SignupPage() {
       if (!result.success) {
         throw new Error(result.message || "Signup failed");
       }
+      
       return result;
     },
+    // ✅ UPDATED onSuccess block
     onSuccess: (result) => {
-      dispatch(setUser({
-        user: result.user,
-        workerDetails: result.workerDetails || null,
-        logedAt: Date.now(),
-      }));
-      toast.success("Signup successful. Logging you in...");
-      
-      const role = result.user?.role;
-      switch (role) {
-        case "admin":
-          navigate("/admin/dashboard", { replace: true });
-          break;
-        case "worker":
-          navigate("/worker/dashboard", { replace: true });
-          break;
-        case "user":
-          navigate("/user/dashboard", { replace: true });
-          break;
-        default:
-          toast.error("Invalid role. Redirecting to login.");
-          localStorage.removeItem("token");
-          navigate("/login");
+      const { token, user } = result;
+
+      if (!user?.role) {
+        toast.error("Invalid user data");
+        return;
       }
+
+      if (!token) {
+        toast.error("Authentication token missing");
+        return;
+      }
+
+      dispatch(
+        setUser({
+          user,
+          token,
+          logedAt: Date.now(),
+        })
+      );
+
+      toast.success(`Welcome ${user.name}! Your account has been created.`);
+
+      setTimeout(() => {
+        navigateByRole(user.role, navigate);
+      }, 200);
     },
+    // ✅ UPDATED onError block (removed localStorage.clear)
     onError: (error) => {
+      console.error('❌ Signup error:', error);
       toast.error(error.message || "Something went wrong during signup");
     },
   });
@@ -376,7 +401,7 @@ function SignupPage() {
                 <div>
                   <label className="block text-sm font-medium mb-1 text-gray-700">Password *</label>
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
@@ -397,7 +422,7 @@ function SignupPage() {
                 <div>
                   <label className="block text-sm font-medium mb-1 text-gray-700">Confirm Password *</label>
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     name="cnfpassword"
                     value={formData.cnfpassword}
                     onChange={handleChange}

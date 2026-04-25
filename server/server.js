@@ -11,7 +11,7 @@ const userRoutes = require("./routes/userRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const workerRoutes = require("./routes/workerRoutes");
 
-// ---------------- CORS Configuration (FIX HERE) ----------------
+// ---------------- CORS Configuration ----------------
 const allowedOrigins = [
   process.env.CLIENT_URL || 'http://localhost:5173',
   'https://www.stufix.space',
@@ -29,7 +29,7 @@ app.use(
       if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
         callback(null, true);
       } else {
-        console.log('Blocked origin:', origin);
+        console.log(`Blocked CORS request from origin: ${origin}`);
         callback(new Error('Not allowed by CORS'));
       }
     },
@@ -62,12 +62,38 @@ app.use((req, res, next) => {
   next();
 });
 
+// ---------------- Request Logging Middleware (Console) ----------------
+app.use((req, res, next) => {
+  const start = Date.now();
+  
+  // Log request
+  console.log(`\n📨 ${req.method} ${req.url}`);
+  console.log(`   IP: ${req.ip}`);
+  console.log(`   User-Agent: ${req.get('user-agent')}`);
+  if (req.method === 'POST' && req.body) {
+    const logBody = { ...req.body };
+    if (logBody.password) logBody.password = '[REDACTED]';
+    if (logBody.cnfpassword) logBody.cnfpassword = '[REDACTED]';
+    console.log(`   Body:`, logBody);
+  }
+  
+  // Log response when finished
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const statusIcon = res.statusCode >= 400 ? '❌' : '✅';
+    console.log(`${statusIcon} ${req.method} ${req.url} - ${res.statusCode} - ${duration}ms`);
+  });
+  
+  next();
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ---------------- Health Check ----------------
-
 app.get("/", (req, res) => {
+  console.log("🏥 Health check endpoint called");
+  
   res.status(200).json({
     success: true,
     message: "College Complaint Management System Server is running",
@@ -77,15 +103,19 @@ app.get("/", (req, res) => {
 });
 
 // ---------------- API Routes ----------------
+console.log("\n📋 Registering API routes...");
 
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/worker", workerRoutes);
 
-// ---------------- 404 Handler ----------------
+console.log("✅ All routes registered successfully");
 
+// ---------------- 404 Handler ----------------
 app.use((req, res) => {
+  console.log(`❌ 404 - Route not found: ${req.method} ${req.originalUrl}`);
+  
   res.status(404).json({
     success: false,
     message: `Route ${req.originalUrl} not found`
@@ -93,9 +123,9 @@ app.use((req, res) => {
 });
 
 // ---------------- Global Error Handler ----------------
-
 app.use((err, req, res, next) => {
-  console.error("Global Error:", err);
+  console.error(`❌ Global error:`, err.message);
+  console.error(err.stack);
 
   res.status(err.status || 500).json({
     success: false,
@@ -105,23 +135,48 @@ app.use((err, req, res, next) => {
 });
 
 // ---------------- Start Server ----------------
-
 const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   try {
+    console.log("\n🔄 Starting server initialization...");
+    
+    // Create database tables
     await createTable();
     console.log("✅ Database tables created/verified successfully");
 
+    // Start server
     app.listen(PORT, "0.0.0.0", () => {
+      console.log(`\n${'='.repeat(60)}`);
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📋 Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`🔗 CORS enabled for: ${allowedOrigins.join(', ')}`);
+      console.log(`${'='.repeat(60)}\n`);
     });
   } catch (error) {
     console.error("❌ Failed to start server:", error);
     process.exit(1);
   }
 }
+
+// ---------------- Graceful Shutdown ----------------
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT signal received: closing HTTP server');
+  process.exit(0);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
 
 startServer();
