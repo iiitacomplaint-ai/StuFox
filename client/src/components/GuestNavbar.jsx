@@ -91,7 +91,7 @@ const GuestNavbar = () => {
         {/* Logo */}
         <Link to='/' className="flex items-center gap-2 font-bold text-2xl group">
           <img 
-  src="/src/assets/stufix-logo.svg" 
+  src="/favico.png" 
   alt="StuFix Logo" 
   className="h-8 w-8 object-contain group-hover:scale-110 transition-transform duration-300"
 />
@@ -148,10 +148,10 @@ const GuestNavbar = () => {
         {/* Mobile Logo */}
         <div className="flex items-center gap-2 mb-4">
           <img 
-            src="/stufix-logo.svg" 
-            alt="StuFix Logo" 
-            className="h-10 w-10 object-contain"
-          />
+  src="/favico.png" 
+  alt="StuFix Logo" 
+  className="h-8 w-8 object-contain group-hover:scale-110 transition-transform duration-300"
+/>
           <span className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
             StuFix
           </span>
