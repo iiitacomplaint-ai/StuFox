@@ -510,21 +510,38 @@
 //   changePassword
 // };
 
+require('dotenv').config(); // ← MUST be first line
 const pool = require('../config/db');
 const bcrypt = require('bcrypt');
 const { generateToken, generateOtpToken, verifyOtpToken } = require('../utils/utility');
-require('dotenv').config();
 const { mailFormat, setOtp, verifyOtp, generateOtp } = require('../utils/otp');
-const SibApiV3Sdk = require('@getbrevo/brevo');
-
-// Initialize Brevo
-let defaultClient = SibApiV3Sdk.ApiClient.instance;
-let apiKey = defaultClient.authentications['api-key'];
-apiKey.apiKey = process.env.BREVO_API_KEY;
-
-let apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+const nodemailer = require('nodemailer');
 
 const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+
+// Create Brevo SMTP transporter
+const transporter = nodemailer.createTransport({
+  host: 'smtp-relay.brevo.com',
+  port: 587,
+  secure: false,
+  auth: {
+    user: process.env.BREVO_SMTP_USER,
+    pass: process.env.BREVO_SMTP_PASSWORD
+  },
+  tls: {
+    rejectUnauthorized: false
+  }
+});
+
+// Verify SMTP connection
+transporter.verify((error, success) => {
+  if (error) {
+    console.error('❌ SMTP connection error:', error.message);
+    console.warn('⚠️  Check BREVO_SMTP_USER and BREVO_SMTP_PASSWORD in your .env file');
+  } else {
+    console.log('✅ SMTP server is ready to send emails');
+  }
+});
 
 const sendotp = async (req, res) => {
   console.log('request received');
@@ -583,21 +600,18 @@ const sendotp = async (req, res) => {
       });
     }
 
-    // Send email using Brevo
+    // Send email using Brevo SMTP
     const emailHtml = mailFormat(otp);
     
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-    sendSmtpEmail.subject = 'StuFix - Your OTP Verification Code';
-    sendSmtpEmail.htmlContent = emailHtml;
-    sendSmtpEmail.sender = {
-      name: process.env.BREVO_FROM_NAME || 'StuFix',
-      email: process.env.BREVO_FROM_EMAIL || 'noreply@stufix.space'
+    const mailOptions = {
+      from: `"${process.env.BREVO_FROM_NAME || 'StuFix'}" <${process.env.BREVO_FROM_EMAIL || 'noreply@stufix.space'}>`,
+      to: email,
+      subject: 'StuFix - Your OTP Verification Code',
+      html: emailHtml,
     };
-    sendSmtpEmail.to = [{ email: email }];
 
-    const response = await apiInstance.sendTransacEmail(sendSmtpEmail);
-    
-    console.log('Email sent via Brevo:', response);
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ OTP email sent successfully:', info.messageId);
 
     const otpToken = generateOtpToken({ email, type });
 
@@ -608,7 +622,7 @@ const sendotp = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Email sending failed:', error);
+    console.error('❌ Email sending failed:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to send OTP. Please try again later.',

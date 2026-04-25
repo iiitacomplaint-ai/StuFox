@@ -782,15 +782,32 @@ const pool = require('../config/db');
 const bcrypt = require('bcrypt');
 require('dotenv').config();
 const crypto = require('crypto');
-const SibApiV3Sdk = require('@getbrevo/brevo');
 const { workerWelcome } = require('../utils/otp');
+const nodemailer = require('nodemailer');
 
-// Initialize Brevo
-let defaultClient = SibApiV3Sdk.ApiClient.instance;
-let apiKey = defaultClient.authentications['api-key'];
-apiKey.apiKey = process.env.BREVO_API_KEY;
+// Create Brevo SMTP transporter
+const transporter = nodemailer.createTransport({
+  host: 'smtp-relay.brevo.com',
+  port: 587,
+  secure: false,
+  auth: {
+    user: process.env.BREVO_SMTP_USER,   // a9353f001@smtp-brevo.com
+    pass: process.env.BREVO_SMTP_PASSWORD // your SMTP key value
+  },
+  tls: {
+    rejectUnauthorized: false
+  }
+});
 
-let apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+// Verify SMTP connection on startup
+transporter.verify((error, success) => {
+  if (error) {
+    console.error('❌ SMTP connection error:', error.message);
+    console.warn('⚠️  Check BREVO_SMTP_USER and BREVO_SMTP_PASSWORD in your .env file');
+  } else {
+    console.log('✅ SMTP server is ready to send emails');
+  }
+});
 
 // Helper function to validate status transitions
 const isValidStatusTransition = (oldStatus, newStatus) => {
@@ -887,22 +904,19 @@ const createWorker = async (req, res) => {
     
     await client.query('COMMIT');
     
-    // Send email using Brevo
+    // Send email using Brevo SMTP
     try {
       const emailHtml = workerWelcome(email, plainPassword, name, department);
       
-      const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-      sendSmtpEmail.subject = 'Welcome to StuFix - Your Worker Account Credentials';
-      sendSmtpEmail.htmlContent = emailHtml;
-      sendSmtpEmail.sender = {
-        name: process.env.BREVO_FROM_NAME || 'StuFix',
-        email: process.env.BREVO_FROM_EMAIL || 'noreply@stufix.space'
+      const mailOptions = {
+        from: `"${process.env.BREVO_FROM_NAME || 'StuFix'}" <${process.env.BREVO_FROM_EMAIL || 'noreply@stufix.space'}>`,
+        to: email,
+        subject: 'Welcome to StuFix - Your Worker Account Credentials',
+        html: emailHtml,
       };
-      sendSmtpEmail.to = [{ email: email }];
 
-      const response = await apiInstance.sendTransacEmail(sendSmtpEmail);
-      
-      console.log('Worker email sent via Brevo:', response);
+      const info = await transporter.sendMail(mailOptions);
+      console.log('✅ Worker email sent successfully:', info.messageId);
       
       return res.status(201).json({
         success: true,
@@ -911,7 +925,7 @@ const createWorker = async (req, res) => {
       });
       
     } catch (emailError) {
-      console.error('Email sending failed:', emailError);
+      console.error('❌ Email sending failed:', emailError);
       return res.status(201).json({
         success: true,
         message: 'Worker created but email failed to send. Please share credentials manually.',
@@ -931,6 +945,7 @@ const createWorker = async (req, res) => {
     client.release();
   }
 };
+
 
 // B. GET ALL WORKERS
 const getWorkers = async (req, res) => {
